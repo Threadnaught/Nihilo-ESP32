@@ -1,0 +1,1 @@
+template project assembled from code already present in the wasm3 and esp-idf repos
