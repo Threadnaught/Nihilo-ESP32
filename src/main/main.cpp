@@ -4,7 +4,9 @@
 #include <stdlib.h>
 
 #include "esp_wifi.h"
+#include "esp32/sha.h"
 #include "mbedtls/rsa.h"
+#include "mbedtls/ecdh.h"
 
 //#include <WiFiClient.h>
 //#include <WebServer.h>
@@ -29,9 +31,11 @@
 #include <time.h>
 */
 
-#define ID_Len 16 //bytes
-#define Key_Len 4096
-#define Tag "nih"
+#define ID_len 16 //bytes
+#define rsa_key_len 512
+#define rsa_key_bits rsa_key_len * 8
+#define ecc_pub_len 32
+#define tag "nih"
 
 
 template <typename T> struct ListElem{
@@ -118,10 +122,13 @@ template <typename T> struct List{
 };
 
 struct Machine{
-	char ID[ID_Len];
+	char ID_str[(ecc_pub_len*2)+1];
+	bool local;
+	unsigned char ecc_pub[ecc_pub_len];
+	//unsigned char ecc_priv[ecc];
 };
 
-List<Machine> all_machines;
+List<Machine> machines;
 
 bool check_safe(char* sender_id, char* target_id){
 	return true;
@@ -168,19 +175,37 @@ cJSON* read_path(cJSON* m, char* path){
 
 void handle_http_message(){}
 
+void bytes_to_hex(unsigned char* bytes, int bytes_len, char* hexbuffer){
+	for(int i = 0; i < bytes_len; i++)
+		snprintf(hexbuffer + (i*2), 3, "%02x", bytes[i]);
+}
+
 int rng(void* state, unsigned char* outbytes, size_t len){
 	esp_fill_random(outbytes, len);
 	return 0;
 }
-char* new_machine(){
-	mbedtls_rsa_context rsa_ctxt;
-	mbedtls_rsa_gen_key(&rsa_ctxt, rng, NULL, Key_Len, 65537);
-	return NULL;
+
+Machine new_machine_ecc(){//create eliptic curve machine
+	mbedtls_ecdh_context ecc_ctxt;
+	//init ecdh/curves:
+	mbedtls_ecdh_init(&ecc_ctxt);
+	mbedtls_ecp_group_load(&ecc_ctxt.grp, MBEDTLS_ECP_DP_CURVE25519);
+	//create public:
+	mbedtls_ecdh_gen_public(&ecc_ctxt.grp, &ecc_ctxt.d, &ecc_ctxt.Q, rng, NULL);
+	unsigned char pub_buf[ecc_pub_len];
+	mbedtls_mpi_write_binary(&ecc_ctxt.Q.X, pub_buf, ecc_pub_len); 
+	unsigned char pub_digest[32];
+	esp_sha(SHA2_256, pub_buf, ecc_pub_len, pub_digest);
+	//copy into machine:
+	Machine ret;
+	memcpy(ret.ID_str, pub_digest, ID_len);
+	mbedtls_ecdh_free(&ecc_ctxt);
+	return ret;
 }
 
 extern "C" void app_main(void)
 {
-	ESP_LOGI(Tag, "Nihilo init start");
+	ESP_LOGI(tag, "Nihilo init start");
 	//begin init filesystem:
 	esp_vfs_spiffs_conf_t conf = {
 		.base_path = "/spiffs",
@@ -189,7 +214,7 @@ extern "C" void app_main(void)
 		.format_if_mount_failed = true
 	};
 	if(esp_vfs_spiffs_register(&conf) != ESP_OK){
-		ESP_LOGE(Tag, "SPIFFS init failure");
+		ESP_LOGE(tag, "SPIFFS init failure");
 		return;
 	}
 	//init wifi (and enable trueish RNG):
@@ -197,12 +222,20 @@ extern "C" void app_main(void)
 	esp_wifi_init(&init_cfg);
 	esp_wifi_set_mode(WIFI_MODE_STA);
 	esp_wifi_start();
+	while(true){
+		Machine m = new_machine_ecc();
+		char hexbuf[(ID_len*2)+1];
+		for(int i = 0; i < ID_len; i++)
+			snprintf(hexbuf + (i*2), 3, "%02x", m.ID_str[i]);
+		ESP_LOGI(tag, "Created Machine %s", hexbuf);
+	}
+	return;
 	//load root file:
 	FILE* root_file = fopen("/spiffs/root.json", "r");
 	if(root_file == NULL){
-		ESP_LOGI(Tag, "Recreating FS");
+		ESP_LOGI(tag, "Recreating FS");
 		esp_spiffs_format("storage");
-		ESP_LOGI(Tag, "Formatted FS, recreating root");
+		ESP_LOGI(tag, "Formatted FS, recreating root");
 		//create root json
 		cJSON* write_root = cJSON_CreateObject();
 		cJSON_AddStringToObject(write_root, "WiFi_SSID", "test");
@@ -229,7 +262,7 @@ extern "C" void app_main(void)
 	cJSON* ssid = cJSON_GetObjectItemCaseSensitive(root, "WiFi_SSID");
 	cJSON* psk = cJSON_GetObjectItemCaseSensitive(root, "WiFi_PSK");
 	if((!cJSON_IsString(ssid)) || (!cJSON_IsString(psk))){
-		ESP_LOGE(Tag, "Invalid WiFi creds!");
+		ESP_LOGE(tag, "Invalid WiFi creds!");
 		return;
 	}
 	wifi_config_t wifi_cfg;
@@ -237,15 +270,14 @@ extern "C" void app_main(void)
 	strcpy((char*)wifi_cfg.sta.password, psk->valuestring);
 	esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_cfg);
 	if(esp_wifi_connect() != ESP_OK){
-		ESP_LOGE(Tag, "Wifi doesn't work!");
+		ESP_LOGE(tag, "Wifi doesn't work!");
 		return;
 	}
 	cJSON_Delete(root);
 	//load machines
 	//begin web server
-	ESP_LOGI(Tag, "Nihilo init successful");
+	ESP_LOGI(tag, "Nihilo init successful");
 }
-
 
 
 
