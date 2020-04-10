@@ -1,5 +1,4 @@
-#master makefile, because other build systems are horrible
-SHELL = /bin/bash
+#master makefile, because all of the other build systems are horrible
 default:
 	idf.py build
 flash:

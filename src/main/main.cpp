@@ -2,11 +2,14 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdexcept>
 
 #include "esp_wifi.h"
 #include "esp32/sha.h"
 #include "mbedtls/rsa.h"
 #include "mbedtls/ecdh.h"
+#include "mbedtls/error.h"
+#include "nvs_flash.h"
 
 //#include <WiFiClient.h>
 //#include <WebServer.h>
@@ -32,9 +35,9 @@
 */
 
 #define ID_len 16 //bytes
-#define rsa_key_len 512
-#define rsa_key_bits rsa_key_len * 8
 #define ecc_pub_len 32
+#define ecc_priv_len 32
+#define shared_secret_len 16
 #define tag "nih"
 
 
@@ -46,6 +49,7 @@ template <typename T> struct ListElem{
 		element = item;
 	}
 };
+//TODO: remake with c++ exceptions!!!!!
 template <typename T> struct List{
 	std::atomic_flag mutex = ATOMIC_FLAG_INIT;
 	ListElem<T>* first = NULL;
@@ -121,11 +125,64 @@ template <typename T> struct List{
 	}
 };
 
+
+int rng(void* state, unsigned char* outbytes, size_t len){
+	esp_fill_random(outbytes, len);
+	return 0;
+}
+
+void bytes_to_hex(unsigned char* bytes, int bytes_len, char* hexbuffer){
+	for(int i = 0; i < bytes_len; i++)
+		snprintf(hexbuffer + (i*2), 3, "%02X", bytes[i]);
+}
+
 struct Machine{
-	char ID_str[(ecc_pub_len*2)+1];
-	bool local;
+	unsigned char ID[ID_len];
+	char ID_str[(ID_len*2)+1];
 	unsigned char ecc_pub[ecc_pub_len];
-	//unsigned char ecc_priv[ecc];
+	bool local;
+	unsigned char ecc_priv[ecc_priv_len];
+	void calc_ID(){
+		unsigned char pub_digest[32];
+		esp_sha(SHA2_256, ecc_pub, ecc_pub_len, pub_digest);
+		memccpy(ID, pub_digest, 1, ID_len);
+		bytes_to_hex(ID, ID_len, ID_str);
+	}
+	Machine(){}
+	Machine(unsigned char* pub){
+		memcpy(ecc_pub, pub, ecc_pub_len);
+		calc_ID();
+		local = false;
+	}
+	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub){
+		if(mbedtls_mpi_write_binary(&pub->X, ecc_pub, ecc_pub_len) != 0)
+			throw std::runtime_error("wrong number of bytes written to buffer");
+		calc_ID();
+		local = false;
+	}
+	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub, mbedtls_mpi* priv) : Machine(grp, pub){
+		mbedtls_mpi_write_binary(priv, ecc_priv, ecc_priv_len);
+		local = true;
+	}
+	void derive_shared(unsigned char* other_pub, unsigned char* secret_buf){//derive the shared secret of this machine(pub/priv) and another machine(pub)
+		if(!local) throw std::runtime_error("derive_shared must be called against local machine");
+		//create/load context:
+		mbedtls_ecdh_context ecc_ctxt;
+		mbedtls_ecdh_init(&ecc_ctxt);
+		mbedtls_ecp_group_load(&ecc_ctxt.grp, MBEDTLS_ECP_DP_CURVE25519);
+		//write pub:
+		mbedtls_mpi_lset(&ecc_ctxt.Qp.Z, 1);
+		mbedtls_mpi_read_binary(&ecc_ctxt.Qp.X, other_pub, ecc_pub_len);
+		//write priv:
+		mbedtls_mpi_read_binary(&ecc_ctxt.d, ecc_priv, ecc_priv_len);
+		//create secret:
+		mbedtls_ecdh_compute_shared(&ecc_ctxt.grp, &ecc_ctxt.z, &ecc_ctxt.Qp, &ecc_ctxt.d, rng, NULL);
+		if(mbedtls_mpi_size(&ecc_ctxt.z) < shared_secret_len) throw std::runtime_error("secret too small");
+		unsigned char intermediate_secret_buf[32];
+		mbedtls_mpi_write_binary(&ecc_ctxt.z, intermediate_secret_buf, 32);
+		memcpy(secret_buf, intermediate_secret_buf, shared_secret_len);
+		mbedtls_ecdh_free(&ecc_ctxt);
+	}
 };
 
 List<Machine> machines;
@@ -175,37 +232,25 @@ cJSON* read_path(cJSON* m, char* path){
 
 void handle_http_message(){}
 
-void bytes_to_hex(unsigned char* bytes, int bytes_len, char* hexbuffer){
-	for(int i = 0; i < bytes_len; i++)
-		snprintf(hexbuffer + (i*2), 3, "%02x", bytes[i]);
-}
-
-int rng(void* state, unsigned char* outbytes, size_t len){
-	esp_fill_random(outbytes, len);
-	return 0;
-}
-
-Machine new_machine_ecc(){//create eliptic curve machine
+Machine new_machine(){//create eliptic curve machine
 	mbedtls_ecdh_context ecc_ctxt;
 	//init ecdh/curves:
 	mbedtls_ecdh_init(&ecc_ctxt);
 	mbedtls_ecp_group_load(&ecc_ctxt.grp, MBEDTLS_ECP_DP_CURVE25519);
 	//create public:
 	mbedtls_ecdh_gen_public(&ecc_ctxt.grp, &ecc_ctxt.d, &ecc_ctxt.Q, rng, NULL);
-	unsigned char pub_buf[ecc_pub_len];
-	mbedtls_mpi_write_binary(&ecc_ctxt.Q.X, pub_buf, ecc_pub_len); 
-	unsigned char pub_digest[32];
-	esp_sha(SHA2_256, pub_buf, ecc_pub_len, pub_digest);
-	//copy into machine:
-	Machine ret;
-	memcpy(ret.ID_str, pub_digest, ID_len);
+	//Machine ret(ecc_ctxt.Q, ecc_ctxt.d);
+	Machine ret(&ecc_ctxt.grp, &ecc_ctxt.Q, &ecc_ctxt.d);
 	mbedtls_ecdh_free(&ecc_ctxt);
+	machines.add(ret);
 	return ret;
 }
 
 extern "C" void app_main(void)
 {
 	ESP_LOGI(tag, "Nihilo init start");
+	//init nvs:
+	nvs_flash_init();
 	//begin init filesystem:
 	esp_vfs_spiffs_conf_t conf = {
 		.base_path = "/spiffs",
@@ -222,14 +267,19 @@ extern "C" void app_main(void)
 	esp_wifi_init(&init_cfg);
 	esp_wifi_set_mode(WIFI_MODE_STA);
 	esp_wifi_start();
-	while(true){
-		Machine m = new_machine_ecc();
-		char hexbuf[(ID_len*2)+1];
-		for(int i = 0; i < ID_len; i++)
-			snprintf(hexbuf + (i*2), 3, "%02x", m.ID_str[i]);
-		ESP_LOGI(tag, "Created Machine %s", hexbuf);
-	}
-	return;
+	/*Machine a = new_machine();
+	Machine b = new_machine();
+	unsigned char a_secret[shared_secret_len];
+	unsigned char b_secret[shared_secret_len];
+	a.derive_shared(b.ecc_pub, a_secret);
+	b.derive_shared(a.ecc_pub, b_secret);
+	char a_secret_hex[(shared_secret_len*2)+1];
+	char b_secret_hex[(shared_secret_len*2)+1];
+	bytes_to_hex(a_secret, shared_secret_len, a_secret_hex);
+	bytes_to_hex(b_secret, shared_secret_len, b_secret_hex);
+	ESP_LOGI(tag, "a secret: %s", a_secret_hex);
+	ESP_LOGI(tag, "b secret: %s", b_secret_hex);
+	return;*/
 	//load root file:
 	FILE* root_file = fopen("/spiffs/root.json", "r");
 	if(root_file == NULL){
