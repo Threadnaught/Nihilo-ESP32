@@ -10,3 +10,6 @@ reflash:
 	idf.py flash
 remonitor: reflash
 	idf.py monitor
+
+wasm:
+	

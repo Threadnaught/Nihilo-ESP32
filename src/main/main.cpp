@@ -2,7 +2,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdexcept>
+
+#include "Nihilo.h"
 
 #include "esp_wifi.h"
 #include "esp32/sha.h"
@@ -10,13 +11,6 @@
 #include "mbedtls/ecdh.h"
 #include "mbedtls/error.h"
 #include "nvs_flash.h"
-
-//#include <WiFiClient.h>
-//#include <WebServer.h>
-
-#include <atomic>
-
-#include "esp_system.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -34,113 +28,15 @@
 #include <time.h>
 */
 
-#define ID_len 16 //bytes
-#define ecc_pub_len 32
-#define ecc_priv_len 32
-#define shared_secret_len 16
-#define tag "nih"
 
-
-template <typename T> struct ListElem{
-	T element;
-	ListElem<T>* next;
-	ListElem(){}
-	ListElem(T item){
-		element = item;
-	}
-};
-//TODO: remake with c++ exceptions!!!!!
-template <typename T> struct List{
-	std::atomic_flag mutex = ATOMIC_FLAG_INIT;
-	ListElem<T>* first = NULL;
-	void add(T toadd){
-		lock_mutex();
-		if(first==NULL){
-			first = new ListElem<T>(toadd);
-			unlock_mutex();
-			return;
-		}
-		ListElem<T>* cur = first;
-		while(cur->next != NULL)cur = cur->next;
-		cur->next = new ListElem<T>(toadd);
-		unlock_mutex();
-	}
-	int count(){
-		lock_mutex();
-		if(first == NULL){
-			unlock_mutex();
-			return 0;
-		}
-		ListElem<T>* cur = first;
-		int i = 0;
-		for(;cur->next != NULL;i++,cur = cur->next);
-		unlock_mutex();
-		return i+1;
-	}
-	T peek(int index=-1){
-		lock_mutex();
-		//if index is -1, peek at end
-		if(index==-1)
-			index=count();
-		//if empty, use this hack to get the default:
-		if(first == NULL) {
-			unlock_mutex();
-			//hack to get default value
-			ListElem<T> hack;
-			return hack.element;
-		}
-		ListElem<T>* cur = first;
-		for(int i = 0; i < index; i++)cur=cur->next;
-		T ret = cur->element;
-		unlock_mutex();
-		return ret;
-	}
-	T pop(int index = -1){
-		lock_mutex();
-		if(index==-1)
-			index=count()-1;
-		if(index == 0){
-			ListElem<T>* todel_first = first;
-			first = first->next;
-			T ret_first = todel_first->element;
-			delete todel_first;
-			unlock_mutex();
-			return ret_first;
-		}
-		ListElem<T>* cur = first;
-		for(int i = 0; i < index-1; i++)
-			cur=cur->next;
-		ListElem<T>* todel = cur->next;
-		T ret = todel->element;
-		cur->next = cur->next->next;
-		delete todel;
-		unlock_mutex();
-		return ret;
-	}
-	void lock_mutex(){
-		while (mutex.test_and_set(std::memory_order_acquire));
-	}
-	void unlock_mutex(){
-		mutex.clear(std::memory_order_release); 
-	}
-};
-
-
-int rng(void* state, unsigned char* outbytes, size_t len){
-	esp_fill_random(outbytes, len);
-	return 0;
-}
-
-void bytes_to_hex(unsigned char* bytes, int bytes_len, char* hexbuffer){
-	for(int i = 0; i < bytes_len; i++)
-		snprintf(hexbuffer + (i*2), 3, "%02X", bytes[i]);
-}
 
 struct Machine{
 	unsigned char ID[ID_len];
 	char ID_str[(ID_len*2)+1];
 	unsigned char ecc_pub[ecc_pub_len];
 	bool local;
+	bool root;
+	bool is_public;
 	unsigned char ecc_priv[ecc_priv_len];
 	void calc_ID(){
 		unsigned char pub_digest[32];
@@ -178,9 +74,11 @@ struct Machine{
 		//create secret:
 		mbedtls_ecdh_compute_shared(&ecc_ctxt.grp, &ecc_ctxt.z, &ecc_ctxt.Qp, &ecc_ctxt.d, rng, NULL);
 		if(mbedtls_mpi_size(&ecc_ctxt.z) < shared_secret_len) throw std::runtime_error("secret too small");
+		//write into secret_buf
 		unsigned char intermediate_secret_buf[32];
 		mbedtls_mpi_write_binary(&ecc_ctxt.z, intermediate_secret_buf, 32);
 		memcpy(secret_buf, intermediate_secret_buf, shared_secret_len);
+		//cleanup
 		mbedtls_ecdh_free(&ecc_ctxt);
 	}
 };
@@ -203,7 +101,7 @@ char* execute(char* sender_id, char* target_id, const char* name, char* param, b
 	return NULL;
 }
 
-cJSON* read_path(cJSON* m, char* path){
+/*cJSON* read_path(cJSON* m, char* path){
 	char readbuf[50];
 	int readpos = 0;
 	cJSON* cur = m;
@@ -218,7 +116,7 @@ cJSON* read_path(cJSON* m, char* path){
 		readpos = 0;
 	}
 	return cur;
-}
+}*/
 //void write_path(cJSON* m, char* path, cJSON* to_write){}
 
 //wasm_read_str
@@ -232,7 +130,17 @@ cJSON* read_path(cJSON* m, char* path){
 
 void handle_http_message(){}
 
-Machine new_machine(){//create eliptic curve machine
+void json_to_file(cJSON* towrite, const char* path){
+	FILE* file = fopen(path, "w");
+	char* str = cJSON_Print(towrite);
+	ESP_LOGI(nih, "writing %s", str);
+	fwrite(str, 1, strlen(str), file);
+	delete str;
+	fflush(file);
+	fclose(file);
+}
+
+Machine new_machine(bool Public=false){//create eliptic curve machine
 	mbedtls_ecdh_context ecc_ctxt;
 	//init ecdh/curves:
 	mbedtls_ecdh_init(&ecc_ctxt);
@@ -241,63 +149,63 @@ Machine new_machine(){//create eliptic curve machine
 	mbedtls_ecdh_gen_public(&ecc_ctxt.grp, &ecc_ctxt.d, &ecc_ctxt.Q, rng, NULL);
 	//Machine ret(ecc_ctxt.Q, ecc_ctxt.d);
 	Machine ret(&ecc_ctxt.grp, &ecc_ctxt.Q, &ecc_ctxt.d);
+	ret.is_public = Public;
 	mbedtls_ecdh_free(&ecc_ctxt);
+	cJSON* machine_json = cJSON_CreateObject();
+	char pub[(ecc_pub_len*2)+1];
+	char priv[(ecc_priv_len*2)+1];
+	bytes_to_hex(ret.ecc_pub, ecc_pub_len, pub);
+	bytes_to_hex(ret.ecc_priv, ecc_priv_len, priv);
+	cJSON_AddStringToObject(machine_json, "Pub", pub);
+	cJSON_AddStringToObject(machine_json, "Priv", priv);
+	cJSON_AddBoolToObject(machine_json, "Public", Public);
+	cJSON_AddItemToObject(machine_json, "Data", cJSON_CreateObject());
+	char fname[sizeof(ret.ID_str)+10];
+	snprintf(fname, sizeof(fname), "/%s.json", ret.ID_str);
+	json_to_file(machine_json, fname);
+	cJSON_Delete(machine_json);
 	machines.add(ret);
 	return ret;
 }
 
+//Machine find_machine(unsigned char* pub){//find machine (LOCAL OR NON-LOCAL)
+
+//}
+
 extern "C" void app_main(void)
 {
-	ESP_LOGI(tag, "Nihilo init start");
+	ESP_LOGI(nih, "Nihilo init start");
 	//init nvs:
-	nvs_flash_init();
+	ESP_ERROR_CHECK(nvs_flash_init());
 	//begin init filesystem:
 	esp_vfs_spiffs_conf_t conf = {
-		.base_path = "/spiffs",
+		.base_path = "",
 		.partition_label = NULL,
 		.max_files = 5,
 		.format_if_mount_failed = true
 	};
-	if(esp_vfs_spiffs_register(&conf) != ESP_OK){
-		ESP_LOGE(tag, "SPIFFS init failure");
-		return;
-	}
+	ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
 	//init wifi (and enable trueish RNG):
 	wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
-	esp_wifi_init(&init_cfg);
-	esp_wifi_set_mode(WIFI_MODE_STA);
-	esp_wifi_start();
-	/*Machine a = new_machine();
-	Machine b = new_machine();
-	unsigned char a_secret[shared_secret_len];
-	unsigned char b_secret[shared_secret_len];
-	a.derive_shared(b.ecc_pub, a_secret);
-	b.derive_shared(a.ecc_pub, b_secret);
-	char a_secret_hex[(shared_secret_len*2)+1];
-	char b_secret_hex[(shared_secret_len*2)+1];
-	bytes_to_hex(a_secret, shared_secret_len, a_secret_hex);
-	bytes_to_hex(b_secret, shared_secret_len, b_secret_hex);
-	ESP_LOGI(tag, "a secret: %s", a_secret_hex);
-	ESP_LOGI(tag, "b secret: %s", b_secret_hex);
-	return;*/
+	ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
+	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+	ESP_ERROR_CHECK(esp_wifi_start());
 	//load root file:
-	FILE* root_file = fopen("/spiffs/root.json", "r");
+	FILE* root_file = fopen("/root.json", "r");
 	if(root_file == NULL){
-		ESP_LOGI(tag, "Recreating FS");
-		esp_spiffs_format("storage");
-		ESP_LOGI(tag, "Formatted FS, recreating root");
+		ESP_LOGI(nih, "Recreating FS. If the FS is full, you may need to run idf.py erase_flash");
 		//create root json
 		cJSON* write_root = cJSON_CreateObject();
 		cJSON_AddStringToObject(write_root, "WiFi_SSID", "test");
-		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnotagoodpassword");
-		FILE* write_root_file = fopen("/spiffs/root.json", "w");
-		char* root_json = cJSON_Print(write_root);
+		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnonihoodpassword");
+		Machine root = new_machine(true);
+		machines.pop();
+		char root_pub[(ecc_pub_len*2)+1];
+		bytes_to_hex(root.ecc_pub, ecc_pub_len, root_pub);
+		cJSON_AddStringToObject(write_root, "Root", root_pub);
+		json_to_file(write_root, "/root.json");
 		cJSON_Delete(write_root);
-		fwrite(root_json, 1, strlen(root_json), write_root_file);
-		delete root_json;
-		fflush(write_root_file);
-		fclose(write_root_file);
-		root_file = fopen("/spiffs/root.json", "r");
+		root_file = fopen("/root.json", "r");
 	}
 	//load root json
 	int root_len = 0;
@@ -312,21 +220,21 @@ extern "C" void app_main(void)
 	cJSON* ssid = cJSON_GetObjectItemCaseSensitive(root, "WiFi_SSID");
 	cJSON* psk = cJSON_GetObjectItemCaseSensitive(root, "WiFi_PSK");
 	if((!cJSON_IsString(ssid)) || (!cJSON_IsString(psk))){
-		ESP_LOGE(tag, "Invalid WiFi creds!");
+		ESP_LOGE(nih, "Invalid WiFi creds!");
 		return;
 	}
 	wifi_config_t wifi_cfg;
 	strcpy((char*)wifi_cfg.sta.ssid, ssid->valuestring);
 	strcpy((char*)wifi_cfg.sta.password, psk->valuestring);
-	esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_cfg);
-	if(esp_wifi_connect() != ESP_OK){
-		ESP_LOGE(tag, "Wifi doesn't work!");
-		return;
-	}
+	
+	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_cfg));
+	ESP_ERROR_CHECK(esp_wifi_connect());
+	//load all machines:
+	ESP_LOGI(nih, "Loading root machine with pub %s", cJSON_GetObjectItemCaseSensitive(root, "Root")->valuestring);
+	//begin server
+	//cleanup:
 	cJSON_Delete(root);
-	//load machines
-	//begin web server
-	ESP_LOGI(tag, "Nihilo init successful");
+	ESP_LOGI(nih, "Nihilo init successful");
 }
 
 

@@ -5,10 +5,10 @@ if (NOT CMAKE_BUILD_EARLY_EXPANSION)
     add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../wasm3/source/ ${build_dir}/../../wasm3/platforms/esp32-idf/build/m3/)
 endif()
 
-set(APP_SOURCES "main.cpp")
+set(APP_SOURCES "main.cpp" "util.cpp")
 
 idf_component_register(SRCS ${APP_SOURCES}
-                       INCLUDE_DIRS ""
+                       INCLUDE_DIRS "${CMAKE_CURRENT_LIST_DIR}/../include/"
                        LDFRAGMENTS linker.lf)
 
 if (idf_ver STREQUAL "4.0")
