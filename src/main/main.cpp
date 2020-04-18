@@ -11,23 +11,11 @@
 #include "mbedtls/ecdh.h"
 #include "mbedtls/error.h"
 #include "nvs_flash.h"
-
 #include "esp_err.h"
-#include "esp_log.h"
 #include "esp_spiffs.h"
 
-#include "cJSON.h"
-
-//deps from wasm:
-/*
-#include "wasm3.h"
-#include "m3_env.h"
-
-#include "extra/fib32.wasm.h"
 
 #include <time.h>
-*/
-
 
 
 struct Machine{
@@ -83,7 +71,7 @@ struct Machine{
 	}
 };
 
-List<Machine> machines;
+list<Machine> machines;
 
 bool check_safe(char* sender_id, char* target_id){
 	return true;
@@ -101,44 +89,8 @@ char* execute(char* sender_id, char* target_id, const char* name, char* param, b
 	return NULL;
 }
 
-/*cJSON* read_path(cJSON* m, char* path){
-	char readbuf[50];
-	int readpos = 0;
-	cJSON* cur = m;
-	for(int i = 0; i < strlen(path); i++){
-		if(path[i] != '.'){
-			if(readpos == 50) return NULL;
-			readbuf[readpos++]=path[i];
-		}
-		readbuf[readpos] = '\0';
-		cur = cJSON_GetObjectItemCaseSensitive(cur, readbuf);
-		if(cur == NULL) return NULL;
-		readpos = 0;
-	}
-	return cur;
-}*/
-//void write_path(cJSON* m, char* path, cJSON* to_write){}
-
 //wasm_read_str
 //wasm_write_str
-//wasm_read_int
-//wasm_write_int
-//wasm_read_float
-//wasm_write_float
-//wasm_read_bool
-//wasm_write_bool
-
-void handle_http_message(){}
-
-void json_to_file(cJSON* towrite, const char* path){
-	FILE* file = fopen(path, "w");
-	char* str = cJSON_Print(towrite);
-	ESP_LOGI(nih, "writing %s", str);
-	fwrite(str, 1, strlen(str), file);
-	delete str;
-	fflush(file);
-	fclose(file);
-}
 
 Machine new_machine(bool Public=false){//create eliptic curve machine
 	mbedtls_ecdh_context ecc_ctxt;
@@ -168,11 +120,11 @@ Machine new_machine(bool Public=false){//create eliptic curve machine
 	return ret;
 }
 
-//Machine find_machine(unsigned char* pub){//find machine (LOCAL OR NON-LOCAL)
+/*Machine find_machine(unsigned char* pub){//find machine (LOCAL OR NON-LOCAL)
 
-//}
+}*/
 
-extern "C" void app_main(void)
+void init()
 {
 	ESP_LOGI(nih, "Nihilo init start");
 	//init nvs:
@@ -237,43 +189,15 @@ extern "C" void app_main(void)
 	ESP_LOGI(nih, "Nihilo init successful");
 }
 
-
-
-
-
-/*
-static void run_wasm(void)
+extern "C" void app_main(void)
 {
-	M3Result result = m3Err_none;
+	run_wasm();
+	return;
+	try{
+		init();
+	}
+	catch (const std::exception& e) {
+		ESP_LOGE(nih, "Exception encountered:%s", e.what());
+	}
+}
 
-	uint8_t* wasm = (uint8_t*)fib32_wasm;
-	uint32_t fsize = fib32_wasm_len-1;
-
-	printf("Loading WebAssembly...\n");
-	IM3Environment env = m3_NewEnvironment ();
-	if (!env) FATAL("m3_NewEnvironment failed");
-
-	IM3Runtime runtime = m3_NewRuntime (env, 1024, NULL);
-	if (!runtime) FATAL("m3_NewRuntime failed");
-
-	IM3Module module;
-	result = m3_ParseModule (env, &module, wasm, fsize);
-	if (result) FATAL("m3_ParseModule: %s", result);
-
-	result = m3_LoadModule (runtime, module);
-	if (result) FATAL("m3_LoadModule: %s", result);
-
-	IM3Function f;
-	result = m3_FindFunction (&f, runtime, "fib");
-	if (result) FATAL("m3_FindFunction: %s", result);
-
-	printf("Running...\n");
-
-	const char* i_argv[2] = { "24", NULL };
-	result = m3_CallWithArgs (f, 1, i_argv);
-
-	if (result) FATAL("m3_CallWithArgs: %s", result);
-
-	long value = *(uint64_t*)(runtime->stack);
-	printf("Result: %ld\n", value);
-}*/
