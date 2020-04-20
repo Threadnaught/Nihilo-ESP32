@@ -17,7 +17,7 @@
 int rng(void* state, unsigned char* outbytes, size_t len);
 void bytes_to_hex(unsigned char* bytes, int bytes_len, char* hexbuffer);
 void json_to_file(cJSON* towrite, const char* path);
-void run_wasm();
+char* run_wasm(char*);
 
 enum packet_type : unsigned char{
 	list_machines = 0,
@@ -33,7 +33,7 @@ struct encrypted_header{
 	unsigned char dest[ecc_pub_len];
 };
 
-template <typename T> struct list_elem{
+/*template <typename T> struct list_elem{
 	T element;
 	list_elem<T>* next;
 	list_elem(){}
@@ -68,7 +68,11 @@ template<typename T> int list<T>::count(){
 	}
 	list_elem<T>* cur = first;
 	int i = 0;
-	for(;cur->next != NULL;i++,cur = cur->next);
+	//for(;cur->next != NULL;i++,cur = cur->next);
+	while(cur->next != NULL){
+		i++;
+		cur = cur->next;
+	}
 	return i+1;
 }
 template<typename T> T list<T>::peek(int index){
@@ -112,4 +116,84 @@ template<typename T> void list<T>::lock_mutex(){
 }
 template<typename T> void list<T>::unlock_mutex(){
 	mutex.clear(std::memory_order_release); 
-}
+}*/
+
+template<typename T> struct list_elem{
+	T elem;
+	list_elem<T>* next = nullptr;
+	list_elem(){}
+	list_elem(T el){elem = el;}
+};
+template<typename T> struct list{
+	list(){}
+	list_elem<T> minus_one_th;//dummy -1th element to simplify operations
+	void add(T toadd){
+		list_elem<T>* cur = &minus_one_th;
+		while(cur->next != nullptr) cur = cur->next;
+		cur->next = new list_elem<T>(toadd);
+	}
+	int count(){
+		list_elem<T>* cur = &minus_one_th;
+		int i = 0;
+		while(cur->next != nullptr) {
+			i++;
+			cur = cur->next;
+		}
+		return i;
+	}
+	T peek(int index=-1){
+		if(index == -1) index += count();
+		list_elem<T>* cur = &minus_one_th;
+		for(int i = 0; i <= index; i++){
+			cur = cur->next;
+			if(cur == nullptr) throw std::runtime_error("peeking off the end");
+		}
+		return cur->elem;
+	}
+	T pop(int index=-1){
+		int cnt = count();
+		if(cnt == 0) throw std::runtime_error("popping empty list");
+		if(index == -1) index += cnt;
+		list_elem<T>* cur = &minus_one_th;
+		for(int i = 0; i < index; i++){
+			cur = cur->next;
+			if(cur == nullptr || cur->next == nullptr) throw std::runtime_error("popping off the end");
+		}
+		list_elem<T>* l_elem = cur->next;
+		cur->next = l_elem->next;
+		T ret = l_elem->elem;
+		delete l_elem;
+		return ret;
+	}
+};
+
+template<typename T0, typename T1> struct key_value_pair{
+	T0 key;
+	T1 value;
+	key_value_pair(){}
+	key_value_pair(T0 k, T1 v){
+		key = k;
+		value = v;
+	}
+};
+
+template<typename T> class locker{
+	private:
+		T target;
+		std::atomic_flag mutex = ATOMIC_FLAG_INIT;
+	public:
+	T* acquire(){
+		while (mutex.test_and_set(std::memory_order_acquire));
+		return &target;
+	}
+	void release(){
+		mutex.clear(std::memory_order_release); 
+	}
+	void set(T toset){
+		*acquire() = toset;
+		release();
+	}
+	locker(T toset){
+		set(toset);
+	}
+};

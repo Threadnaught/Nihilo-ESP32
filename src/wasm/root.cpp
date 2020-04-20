@@ -5,6 +5,7 @@
 
 NIH_EXPORT(testFunc, param){
 	char* x = (char*) malloc(50);
-	snprintf(x, 50, "I this is malloc'd: %s", param);
+	strcpy(x, "This is malloc'd: ");
+	strcpy(x+strlen(x), param);
 	return x;
 }

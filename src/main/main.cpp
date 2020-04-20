@@ -191,7 +191,7 @@ void init()
 
 extern "C" void app_main(void)
 {
-	run_wasm();
+	ESP_LOGI(nih, "WASM exec:%s", run_wasm("hello, world"));
 	return;
 	try{
 		init();
