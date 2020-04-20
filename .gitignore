@@ -1,5 +1,5 @@
-build
-sdkconfig
-sdkconfig.old
+src/build
+src/sdkconfig
+src/sdkconfig.old
 *.wasm
 *.wasm.h
