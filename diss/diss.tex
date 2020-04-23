@@ -1,56 +1,81 @@
 \documentclass{article}
 \usepackage[parfill]{parskip}
+\usepackage{url}
 \begin{document}
 
 \section{Abstract}
-AAAAA
+
 
 \tableofcontents
 \section{Introduction}
-Over the past 50 years, UNIX and its descendent Operating Systems have created a set of interchangeable, near-universal patterns for how computers interact with themselves, each other, and the outside world.
+Over the past 50 years, UNIX and its descendent Operating Systems have created a set of standardised patterns for how computers interact with themselves, each other, and the outside world.
 These patterns; files, threads, device drivers, etc. are so powerful that computing devices are classified first by whether or not they are capable of supporting them.
 Microprocessors typically support multitasking, networking, and are connected to large amounts of volatile and non-volatile storage.
 Microcontrollers, on the other hand, tend to be realtime, with primitive networking and EEPROM storage that often cannot be rewritten at runtime.
 
 As moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
-Because waiting for cheaper hardware is no longer a valid 'optimization' stratergy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
-These are traditionally classified as microcontrollers, but have capabilities which blur the line between the two classes of device. 
-One such super-microcontroller is the Espressif systems ESP-32. A comparison between the ESP-32, Arduino Uno (with an ATmega328P processor), and Pixel 3A (with a Snapdragon 670 processor) follows;
+Because waiting for cheaper hardware is no longer a valid \lq optimization' stratergy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
+Although they are traditionally classified as microcontrollers, but have capabilities which blur the line between the microcontrollers and microprocessors.
+The \lq super-mircocontroller' used in this project was the Espressif systems ESP-32.
+
+The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution, IO and communication in a simple to use and extensible platform.
+Because implementing an entire platform of this scale is outside of the scope of a single-module dissertation, this project is more a proof-of-concept than a final version.
+
+
+\pagebreak
+\section{Literature Review}
+
+
+\section{Methodology}
+\subsection{Problem Description}
+\subsection{Technologies used}
+\subsubsection{ESP-32}
+
+Released in 2016, the ESP-32 is a powerful dual-core microcontroller.
+It is based a Cadence IP core, which is in turn based on the Xtensa instruction set \cite{32datasheet}.
+This instruction set is often used for specalist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
+Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
+A comparison between the ESP-32, Arduino Uno (with an ATmega328P mircocontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
 \begin{table}[h]
 \begin{tabular}{l|l|l|l}
 					& Arduino Uno		& ESP-32		& Pixel 3a		\\ \hline
 Clock Frequency		& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
-RAM					& 32 KB				& 520 KB		& 4000000 KB	\\ \hline
+RAM					& 32 KB				& 520 KB		& 4 GB			\\ \hline
 Networking support	& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
 Rewritable storage	& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
+External SD Card	& N 				& \textbf{Y}	& N				\\ \hline
 Bluetooth			& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
 Crypto engine		& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
 Ethernet			& N 				& \textbf{Y}	& N				\\ \hline
-IO pins				& \textbf{Y}		& \textbf{Y}	& N				\\ \hline
+IO pins				& \textbf{20/22}	& \textbf{39}	& N/A			\\
 
 \end{tabular}
 \end{table}
 
-\pagebreak
-\emph{Note: Many of the features missing from the Arduino can be added using external boards or 'shields'}
+\emph{Note: Missing functionality can be added using external electronics}
 
-The goal of this project is to the first of a new set of patterns designed from the ground up for the new hardware.
+In addition to the I/O in the above table, the ESP-32 also supports SPI, I\textsuperscript{2}S, I\textsuperscript{2}C, CAN, as well as dedicated hardware for accelerating hashing, encryption, signing, decryption, and cryptographic random number generation.
 
-\pagebreak
-\section{Literature Review}
-BBBBB
+\subsubsection{SPIFFS}
+\subsubsection{Webassembly}
+\subsection{Implementation}
 
-\section{Implementation}
-BBBBB
 
 \section{Results}
-BBBBB
+
 
 \section{Analysis and conclusion}
-BBBBB
+
 
 \section{Reflection}
-BBBBB
 
+
+\section{References}
+\begin{thebibliography}{9}
+\bibitem{32datasheet}
+	\url{https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf}
+\bibitem{lx6datasheet}
+	\url{https://mirrobo.ru/wp-content/uploads/2016/11/Cadence_Tensillica_Xtensa_LX6_ds.pdf}
+\end{thebibliography}
 \end{document}
