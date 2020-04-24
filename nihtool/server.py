@@ -1,8 +1,8 @@
 from http import server
 
-data = ""
+data = "\n"
 
-class NihAddressHanlder(server.CGIHTTPRequestHandler):
+class NihAddressHanlder(server.BaseHTTPRequestHandler):
 	def do_GET(self):
 		global data
 		self.wfile.write(data.encode())
