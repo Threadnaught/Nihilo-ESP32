@@ -1,12 +1,14 @@
 from http import server
 
 data = []
-
+dontsendself=True
 
 class NihAddressHanlder(server.BaseHTTPRequestHandler):
 	def do_GET(self):
 		global data
 		tosend = data
+		if dontsendself:
+			tosend = [x for x in tosend if x[0].strip() != self.client_address[0].strip()]
 		output_raw = str(len(tosend)) + '\n' + '\n'.join([x[0] + ':' + x[1] for x in tosend])
 		self.wfile.write(output_raw.encode())
 		self.send_response(200)
