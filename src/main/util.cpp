@@ -1,10 +1,13 @@
 #include "Nihilo.h"
+#include "nvs_flash.h"
+#include "esp_spiffs.h"
 #include <cstring>
 
 #include "esp_wifi.h"
-#include "freertos/event_groups.h"
+#include "freertos/task.h"
 
 bool done = false;
+ip_event_got_ip_t connect_info;
 
 int rng(void* state, unsigned char* outbytes, size_t len){
 	esp_fill_random(outbytes, len);
@@ -32,16 +35,28 @@ void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, voi
 {
 	if(event_base == WIFI_EVENT){
 		esp_wifi_connect();
-		return;
 	}
-	if(event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP){
+	else if(event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP){
+		connect_info = *(ip_event_got_ip_t*) event_data;
 		ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
 		done = true;
-		ESP_LOGI(nih, "got ip: " IPSTR " gate: " IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.gw));
 	}
 }
 
-void init_wifi(void)
+void init_flash(){
+	//init nvs:
+	ESP_ERROR_CHECK(nvs_flash_init());
+	//begin init filesystem:
+	esp_vfs_spiffs_conf_t conf = {
+		.base_path = "",
+		.partition_label = NULL,
+		.max_files = 5,
+		.format_if_mount_failed = true
+	};
+	ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
+}
+
+void init_wifi()
 {
 	ESP_ERROR_CHECK(esp_netif_init());
 	ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -50,7 +65,7 @@ void init_wifi(void)
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 }
 
-void connect_wifi(const char* ssid, const char* psk){
+ip_event_got_ip_t connect_wifi(const char* ssid, const char* psk){
 	//register event handlers:
 	esp_event_handler_instance_t instance_any_id;
 	esp_event_handler_instance_t instance_got_ip;
@@ -64,9 +79,17 @@ void connect_wifi(const char* ssid, const char* psk){
 	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
 	ESP_ERROR_CHECK(esp_wifi_start() );
 	//wait to be connected:
-	while (!done);
-	ESP_LOGI( nih, "Connected!!!");
+	while (!done)
+		vTaskDelay(10/portTICK_PERIOD_MS);
 	//unregister event handlers:
 	ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
 	ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
+	return connect_info;
+}
+
+void register_root(ip_event_got_ip_t ip_info, unsigned char* root_pub){
+	esp_http_client_config_t request = {
+		.url = "http://httpbin.org/redirect/2",
+		.event_handler = _http_event_handle,
+	};
 }

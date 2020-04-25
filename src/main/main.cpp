@@ -14,9 +14,7 @@
 #include "esp_err.h"
 #include "esp_spiffs.h"
 
-
-#include <time.h>
-
+#include "root.wasm.h"
 
 struct Machine{
 	unsigned char ID[ID_len];
@@ -127,21 +125,8 @@ Machine new_machine(bool Public=false){//create eliptic curve machine
 void init()
 {
 	ESP_LOGI(nih, "Nihilo init start");
-	//init nvs:
-	ESP_ERROR_CHECK(nvs_flash_init());
-	//begin init filesystem:
-	esp_vfs_spiffs_conf_t conf = {
-		.base_path = "",
-		.partition_label = NULL,
-		.max_files = 5,
-		.format_if_mount_failed = true
-	};
-	ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
-	//init wifi (and enable trueish RNG):
-	wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
-	ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
-	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-	ESP_ERROR_CHECK(esp_wifi_start());
+	init_flash();
+	init_wifi();
 	//load root file:
 	FILE* root_file = fopen("/root.json", "r");
 	if(root_file == NULL){
@@ -149,7 +134,7 @@ void init()
 		//create root json
 		cJSON* write_root = cJSON_CreateObject();
 		cJSON_AddStringToObject(write_root, "WiFi_SSID", "test");
-		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnonihoodpassword");
+		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnotagoodpassword");
 		Machine root = new_machine(true);
 		machines.pop();
 		char root_pub[(ecc_pub_len*2)+1];
@@ -175,15 +160,10 @@ void init()
 		ESP_LOGE(nih, "Invalid WiFi creds!");
 		return;
 	}
-	wifi_config_t wifi_cfg;
-	strcpy((char*)wifi_cfg.sta.ssid, ssid->valuestring);
-	strcpy((char*)wifi_cfg.sta.password, psk->valuestring);
-	
-	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_cfg));
-	ESP_ERROR_CHECK(esp_wifi_connect());
+	connect_wifi(ssid->valuestring, psk->valuestring);
 	//load all machines:
 	ESP_LOGI(nih, "Loading root machine with pub %s", cJSON_GetObjectItemCaseSensitive(root, "Root")->valuestring);
-	//begin server
+	
 	//cleanup:
 	cJSON_Delete(root);
 	ESP_LOGI(nih, "Nihilo init successful");
@@ -191,8 +171,8 @@ void init()
 
 extern "C" void app_main(void)
 {
-	ESP_LOGI(nih, "WASM exec:%s", run_wasm("hello, world"));
-	return;
+	//ESP_LOGI(nih, "WASM exec:%s", run_wasm("wrapper_testFunc", "hello, world", (uint8_t*)root_opt_wasm, root_opt_wasm_len-1, nullptr));
+	//return;
 	try{
 		init();
 	}
