@@ -10,64 +10,9 @@
 #include "mbedtls/rsa.h"
 #include "mbedtls/ecdh.h"
 #include "mbedtls/error.h"
-#include "nvs_flash.h"
 #include "esp_err.h"
-#include "esp_spiffs.h"
 
 #include "root.wasm.h"
-
-struct Machine{
-	unsigned char ID[ID_len];
-	char ID_str[(ID_len*2)+1];
-	unsigned char ecc_pub[ecc_pub_len];
-	bool local;
-	bool root;
-	bool is_public;
-	unsigned char ecc_priv[ecc_priv_len];
-	void calc_ID(){
-		unsigned char pub_digest[32];
-		esp_sha(SHA2_256, ecc_pub, ecc_pub_len, pub_digest);
-		memccpy(ID, pub_digest, 1, ID_len);
-		bytes_to_hex(ID, ID_len, ID_str);
-	}
-	Machine(){}
-	Machine(unsigned char* pub){
-		memcpy(ecc_pub, pub, ecc_pub_len);
-		calc_ID();
-		local = false;
-	}
-	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub){
-		if(mbedtls_mpi_write_binary(&pub->X, ecc_pub, ecc_pub_len) != 0)
-			throw std::runtime_error("wrong number of bytes written to buffer");
-		calc_ID();
-		local = false;
-	}
-	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub, mbedtls_mpi* priv) : Machine(grp, pub){
-		mbedtls_mpi_write_binary(priv, ecc_priv, ecc_priv_len);
-		local = true;
-	}
-	void derive_shared(unsigned char* other_pub, unsigned char* secret_buf){//derive the shared secret of this machine(pub/priv) and another machine(pub)
-		if(!local) throw std::runtime_error("derive_shared must be called against local machine");
-		//create/load context:
-		mbedtls_ecdh_context ecc_ctxt;
-		mbedtls_ecdh_init(&ecc_ctxt);
-		mbedtls_ecp_group_load(&ecc_ctxt.grp, MBEDTLS_ECP_DP_CURVE25519);
-		//write pub:
-		mbedtls_mpi_lset(&ecc_ctxt.Qp.Z, 1);
-		mbedtls_mpi_read_binary(&ecc_ctxt.Qp.X, other_pub, ecc_pub_len);
-		//write priv:
-		mbedtls_mpi_read_binary(&ecc_ctxt.d, ecc_priv, ecc_priv_len);
-		//create secret:
-		mbedtls_ecdh_compute_shared(&ecc_ctxt.grp, &ecc_ctxt.z, &ecc_ctxt.Qp, &ecc_ctxt.d, rng, NULL);
-		if(mbedtls_mpi_size(&ecc_ctxt.z) < shared_secret_len) throw std::runtime_error("secret too small");
-		//write into secret_buf
-		unsigned char intermediate_secret_buf[32];
-		mbedtls_mpi_write_binary(&ecc_ctxt.z, intermediate_secret_buf, 32);
-		memcpy(secret_buf, intermediate_secret_buf, shared_secret_len);
-		//cleanup
-		mbedtls_ecdh_free(&ecc_ctxt);
-	}
-};
 
 list<Machine> machines;
 
@@ -108,7 +53,6 @@ Machine new_machine(bool Public=false){//create eliptic curve machine
 	bytes_to_hex(ret.ecc_priv, ecc_priv_len, priv);
 	cJSON_AddStringToObject(machine_json, "Pub", pub);
 	cJSON_AddStringToObject(machine_json, "Priv", priv);
-	cJSON_AddBoolToObject(machine_json, "Public", Public);
 	cJSON_AddItemToObject(machine_json, "Data", cJSON_CreateObject());
 	char fname[sizeof(ret.ID_str)+10];
 	snprintf(fname, sizeof(fname), "/%s.json", ret.ID_str);
@@ -137,22 +81,14 @@ void init()
 		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnotagoodpassword");
 		Machine root = new_machine(true);
 		machines.pop();
-		char root_pub[(ecc_pub_len*2)+1];
-		bytes_to_hex(root.ecc_pub, ecc_pub_len, root_pub);
-		cJSON_AddStringToObject(write_root, "Root", root_pub);
+		cJSON_AddStringToObject(write_root, "Root", root.ID_str);
 		json_to_file(write_root, "/root.json");
 		cJSON_Delete(write_root);
-		root_file = fopen("/root.json", "r");
 	}
-	//load root json
-	int root_len = 0;
-	while(fgetc(root_file) != EOF) root_len++;
-	fseek(root_file, 0, SEEK_SET);
-	char* root_file_json = (char*)malloc(root_len + 1);
-	fread(root_file_json, 1, root_len, root_file);
-	fclose(root_file);
-	cJSON* root = cJSON_Parse(root_file_json);
-	delete root_file_json;
+	else{
+		fclose(root_file);
+	}
+	cJSON* root = file_to_json("/root.json");
 	//connect to wifi
 	cJSON* ssid = cJSON_GetObjectItemCaseSensitive(root, "WiFi_SSID");
 	cJSON* psk = cJSON_GetObjectItemCaseSensitive(root, "WiFi_PSK");
@@ -160,10 +96,19 @@ void init()
 		ESP_LOGE(nih, "Invalid WiFi creds!");
 		return;
 	}
-	connect_wifi(ssid->valuestring, psk->valuestring);
-	//load all machines:
-	ESP_LOGI(nih, "Loading root machine with pub %s", cJSON_GetObjectItemCaseSensitive(root, "Root")->valuestring);
-	
+	ip_event_got_ip_t ip_info = connect_wifi(ssid->valuestring, psk->valuestring);
+	//load root:
+	machines.add(load_from_memory(cJSON_GetObjectItemCaseSensitive(root, "Root")->valuestring));
+	//update latest wasm:
+	save_wasm(machines.peek(0).ID, (uint8_t*)root_opt_wasm, root_opt_wasm_len-1);
+	//find all machines:
+	char root_pub[(ecc_pub_len*2)+1];
+	bytes_to_hex(machines.peek(0).ecc_pub, ecc_pub_len, root_pub);
+	register_machine(ip_info, root_pub);
+	load_non_local(ip_info, &machines);
+	/*for(int i = 0; i < machines.count(); i++){
+		ESP_LOGI(nih, "machine:%s", machines.peek(i).ID_str);
+	}*/
 	//cleanup:
 	cJSON_Delete(root);
 	ESP_LOGI(nih, "Nihilo init successful");
@@ -175,6 +120,7 @@ extern "C" void app_main(void)
 	//return;
 	try{
 		init();
+		ESP_LOGI(nih, "%s", run_wasm("wrapper_testFunc", "hello, world", (uint8_t*)root_opt_wasm, root_opt_wasm_len-1, machines.peek(0).ID));
 	}
 	catch (const std::exception& e) {
 		ESP_LOGE(nih, "Exception encountered:%s", e.what());
