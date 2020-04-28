@@ -1,1 +1,3 @@
-template project assembled from code already present in the wasm3 and esp-idf repos
+- template project assembled from code already present in the wasm3 and esp-idf repos
+- many of the esp-idf have large, complicated APIs which require large amounts of very specific boilerplate code to function at all. This code was copied from the examples.
+- create_ap was used to create a pass-through WiFi network

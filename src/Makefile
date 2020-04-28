@@ -11,8 +11,8 @@ reflash: allfiles
 remonitor: reflash
 	idf.py monitor
 
-include/root.wasm.h: wasm/root.cpp
+wasm/wasm-opt.wasm: wasm/root.cpp
 	make -C wasm
 
 #target to make sensitive to all files:
-allfiles: include/root.wasm.h main/*.cpp
+allfiles: wasm/wasm-opt.wasm include/root.wasm.h main/*.cpp

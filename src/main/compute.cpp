@@ -145,13 +145,27 @@ m3ApiRawFunction(nih_read_string)//passed path and pointer to output
 	*y = m3ApiPtrToOffset(ret);
 	m3ApiSuccess();
 }
-m3ApiRawFunction(nih_execute_func)//passed machine, path and param
+m3ApiRawFunction(nih_execute_func)//passed machine, function name, param (and callback??)
 {
 	m3ApiSuccess();
 }
-
+char* exec(char* name, char* param, unsigned char* ID){
+	for(int i = 0; i < machines.count(); i++){
+		Machine cur = machines.peek(i);
+		if(memcmp(ID, cur.ID, ID_len)==0){
+			if(cur.local){
+				return run_wasm(name, param, ID);
+			}
+			else{
+				ESP_LOGI(nih, "running against %s", cur.IP);
+				return nullptr;
+			}
+		}
+	}
+	throw std::runtime_error("could not find machine!");
+}
 //calling function has responsibility for cleaning up both parameter and return value!!!
-char* run_wasm(char* name, char* param, unsigned char* wasm, unsigned int wasm_length, unsigned char* ID)
+char* run_wasm(char* name, char* param, unsigned char* ID)
 {
 	IM3Environment env = m3_NewEnvironment ();
 	IM3Runtime runtime = m3_NewRuntime (env, 10*1024, NULL);
@@ -163,8 +177,12 @@ char* run_wasm(char* name, char* param, unsigned char* wasm, unsigned int wasm_l
 	ids->add(key_value_pair<IM3Runtime, char*>(runtime, (char*)ID));
 	all_ids.release();
 
+	unsigned char* wasm;
+	int wasm_length = load_wasm(ID, &wasm);
+
 	IM3Module module;
-	M3Result result = m3_ParseModule (env, &module, (uint8_t*)wasm, wasm_length-1);
+	M3Result result = m3_ParseModule (env, &module, (uint8_t*)wasm, wasm_length - 1);
+	delete wasm;
 	if(result) ESP_LOGE(nih, "result 1:%s", result);
 	result = m3_LoadModule (runtime, module);
 	if(result) ESP_LOGE(nih, "result 2:%s", result);
@@ -179,7 +197,10 @@ char* run_wasm(char* name, char* param, unsigned char* wasm, unsigned int wasm_l
 	result = m3_LinkRawFunction (module, "nih", "readString", "v(**)", &nih_read_string);
 	//if(result) ESP_LOGE(nih, "result 7:%s", result);
 	IM3Function func;
-	result = m3_FindFunction (&func, runtime, name);
+	char fullname[120];
+	strcpy(fullname, "wrapper_");
+	strcpy(fullname + strlen(fullname), name);
+	result = m3_FindFunction (&func, runtime, fullname);
 	if(result) ESP_LOGE(nih, "result 8:%s", result);
 	const char* char_args[] = { NULL };
 	result = m3_CallWithArgs (func, 0, char_args);

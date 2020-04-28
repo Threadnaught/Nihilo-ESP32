@@ -93,7 +93,8 @@ ip_event_got_ip_t connect_wifi(const char* ssid, const char* psk){
 	ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &instance_any_id));
 	ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
 	//begin connection:
-	wifi_config_t wifi_config = {0};
+	wifi_config_t wifi_config;
+	memset(&wifi_config, 0, sizeof(wifi_config));
 	strcpy((char*)wifi_config.sta.ssid, ssid);
 	strcpy((char*)wifi_config.sta.password, psk);
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
@@ -124,11 +125,11 @@ void register_machine(ip_event_got_ip_t ip_info, char* pub_hex){
 	char body[200];
 	snprintf(body, sizeof(body), IPSTR ":%s", IP2STR(&ip_info.ip_info.ip), pub_hex);
 	//ESP_LOGI(nih, "Body: %s", body);
-	esp_http_client_config_t request = {
-		.url = url,
-		.method = HTTP_METHOD_POST,
-		.event_handler = http_register_handler
-	};
+	esp_http_client_config_t request;
+	memset(&request, 0, sizeof(request));
+	request.url = url;
+	request.method = HTTP_METHOD_POST;
+	request.event_handler = http_register_handler;
 	esp_http_client_handle_t client = esp_http_client_init(&request);
 	esp_http_client_set_post_field(client, body, strlen(body));
 	register_finished = false;
@@ -179,6 +180,8 @@ void load_non_local(ip_event_got_ip_t ip_info, list<Machine>* list){
 	delete machine_return_raw;
 }
 
+
+
 Machine load_from_memory(char* id_str) {
 	char fname[40];
 	snprintf(fname, sizeof(fname), "/%s.json", id_str);
@@ -188,30 +191,31 @@ Machine load_from_memory(char* id_str) {
 	return ret;
 }
 
-/*void id_to_fname(char* fname, IM3Runtime runtime){
-	ESP_LOGI(nih, "locking");
-	list<key_value_pair<IM3Runtime, char*>>* ids = *all_ids.acquire();
-	char* id = popPair(ids, runtime);
-	ids->add(key_value_pair<IM3Runtime, char*>(runtime, id));
-	all_ids.release();
-	fname[0] = '/';
-	bytes_to_hex((unsigned char*)id, ID_len, fname+1);
-	strcpy(fname+strlen(fname), ".json");
-	ESP_LOGI(nih, "%s", fname);
-}*/
-
-void save_wasm(unsigned char* ID, unsigned char* wasm, int len){
-	char fname[40];
+void id_to_fname(char* fname, unsigned char* ID){
 	fname[0] = '/';
 	bytes_to_hex((unsigned char*)ID, ID_len, fname+1);
 	strcpy(fname+strlen(fname), ".wasm");
+}
+
+void save_wasm(unsigned char* ID, unsigned char* wasm, int len){
+	char fname[40];
+	id_to_fname(fname, ID);
+	remove(fname);
 	FILE* file = fopen(fname, "w");
-	char* str = cJSON_Print(towrite);
 	fwrite(wasm, 1, len, file);
-	delete str;
 	fflush(file);
 	fclose(file);
 }
 int load_wasm(unsigned char* ID, unsigned char** wasm){
-
+	char fname[40];
+	id_to_fname(fname, ID);
+	FILE* file = fopen(fname, "r");
+	int root_len = 0;
+	while(fgetc(file) != EOF) root_len++;
+	fseek(file, 0, SEEK_SET);
+	unsigned char* file_json = (unsigned char*)malloc(root_len + 1);
+	fread(file_json, 1, root_len, file);
+	*wasm = file_json;
+	ESP_LOGI(nih, "root len: %i", root_len);
+	return root_len;
 }

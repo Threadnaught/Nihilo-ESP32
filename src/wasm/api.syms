@@ -1,3 +1,6 @@
-paramSize
 getParam
 setReturn
+mallocWasm
+writeString
+readString
+knownIds

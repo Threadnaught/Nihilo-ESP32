@@ -113,11 +113,9 @@ struct Machine{
 	unsigned char ID[ID_len];
 	char ID_str[(ID_len*2)+1];
 	unsigned char ecc_pub[ecc_pub_len];
+	unsigned char ecc_priv[ecc_priv_len];
 	bool local;
 	char IP[20];
-	bool root;
-	bool is_public;
-	unsigned char ecc_priv[ecc_priv_len];
 	void calc_ID(){
 		unsigned char pub_digest[32];
 		esp_sha(SHA2_256, ecc_pub, ecc_pub_len, pub_digest);
@@ -143,16 +141,19 @@ struct Machine{
 	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub){
 		if(mbedtls_mpi_write_binary(&pub->X, ecc_pub, ecc_pub_len) != 0)
 			throw std::runtime_error("wrong number of bytes written to buffer");
+		memset(IP, 0, sizeof(IP));
 		calc_ID();
 		local = false;
 	}
 	Machine(mbedtls_ecp_group* grp, mbedtls_ecp_point* pub, mbedtls_mpi* priv) : Machine(grp, pub){
 		mbedtls_mpi_write_binary(priv, ecc_priv, ecc_priv_len);
+		memset(IP, 0, sizeof(IP));
 		local = true;
 	}
 	Machine(cJSON* description){
 		hex_to_bytes(cJSON_GetObjectItemCaseSensitive(description, "Pub")->valuestring, ecc_pub);
 		hex_to_bytes(cJSON_GetObjectItemCaseSensitive(description, "Priv")->valuestring, ecc_priv);
+		memset(IP, 0, sizeof(IP));
 		calc_ID();
 		local = true;
 	}
@@ -179,10 +180,13 @@ struct Machine{
 	}
 };
 
-char* run_wasm(char* name, char* param, unsigned char* wasm, unsigned int wasm_length, unsigned char* ID);
+extern list<Machine> machines;
+
+char* run_wasm(char* name, char* param, unsigned char* ID);
 void init_flash();
 void init_wifi();
 ip_event_got_ip_t connect_wifi(const char* ssid, const char* psk);
 void register_machine(ip_event_got_ip_t ip_info, char* root_pub_hex);
 void load_non_local(ip_event_got_ip_t ip_info, list<Machine>* list);
 Machine load_from_memory(char* id_str);
+char* exec(char* name, char* param, unsigned char* ID);

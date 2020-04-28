@@ -35,7 +35,7 @@ char* execute(char* sender_id, char* target_id, const char* name, char* param, b
 //wasm_read_str
 //wasm_write_str
 
-Machine new_machine(bool Public=false){//create eliptic curve machine
+Machine new_machine(){//create eliptic curve machine
 	mbedtls_ecdh_context ecc_ctxt;
 	//init ecdh/curves:
 	mbedtls_ecdh_init(&ecc_ctxt);
@@ -44,7 +44,6 @@ Machine new_machine(bool Public=false){//create eliptic curve machine
 	mbedtls_ecdh_gen_public(&ecc_ctxt.grp, &ecc_ctxt.d, &ecc_ctxt.Q, rng, NULL);
 	//Machine ret(ecc_ctxt.Q, ecc_ctxt.d);
 	Machine ret(&ecc_ctxt.grp, &ecc_ctxt.Q, &ecc_ctxt.d);
-	ret.is_public = Public;
 	mbedtls_ecdh_free(&ecc_ctxt);
 	cJSON* machine_json = cJSON_CreateObject();
 	char pub[(ecc_pub_len*2)+1];
@@ -58,7 +57,6 @@ Machine new_machine(bool Public=false){//create eliptic curve machine
 	snprintf(fname, sizeof(fname), "/%s.json", ret.ID_str);
 	json_to_file(machine_json, fname);
 	cJSON_Delete(machine_json);
-	machines.add(ret);
 	return ret;
 }
 
@@ -79,8 +77,7 @@ void init()
 		cJSON* write_root = cJSON_CreateObject();
 		cJSON_AddStringToObject(write_root, "WiFi_SSID", "test");
 		cJSON_AddStringToObject(write_root, "WiFi_PSK", "thisisnotagoodpassword");
-		Machine root = new_machine(true);
-		machines.pop();
+		Machine root = new_machine();
 		cJSON_AddStringToObject(write_root, "Root", root.ID_str);
 		json_to_file(write_root, "/root.json");
 		cJSON_Delete(write_root);
@@ -96,18 +93,21 @@ void init()
 		ESP_LOGE(nih, "Invalid WiFi creds!");
 		return;
 	}
+	ESP_LOGI(nih, "connecting...");
 	ip_event_got_ip_t ip_info = connect_wifi(ssid->valuestring, psk->valuestring);
+	ESP_LOGI(nih, "connected");
 	//load root:
 	machines.add(load_from_memory(cJSON_GetObjectItemCaseSensitive(root, "Root")->valuestring));
 	//update latest wasm:
-	save_wasm(machines.peek(0).ID, (uint8_t*)root_opt_wasm, root_opt_wasm_len-1);
+	save_wasm(machines.peek(0).ID, (uint8_t*)root_opt_wasm, root_opt_wasm_len);
 	//find all machines:
 	char root_pub[(ecc_pub_len*2)+1];
 	bytes_to_hex(machines.peek(0).ecc_pub, ecc_pub_len, root_pub);
 	register_machine(ip_info, root_pub);
 	load_non_local(ip_info, &machines);
 	/*for(int i = 0; i < machines.count(); i++){
-		ESP_LOGI(nih, "machine:%s", machines.peek(i).ID_str);
+		Machine cur = machines.peek(i);
+		ESP_LOGI(nih, "machine:%s:%s", cur.IP, cur.ID_str);
 	}*/
 	//cleanup:
 	cJSON_Delete(root);
@@ -116,14 +116,23 @@ void init()
 
 extern "C" void app_main(void)
 {
-	//ESP_LOGI(nih, "WASM exec:%s", run_wasm("wrapper_testFunc", "hello, world", (uint8_t*)root_opt_wasm, root_opt_wasm_len-1, nullptr));
-	//return;
 	try{
 		init();
-		ESP_LOGI(nih, "%s", run_wasm("wrapper_testFunc", "hello, world", (uint8_t*)root_opt_wasm, root_opt_wasm_len-1, machines.peek(0).ID));
+		if(machines.count() > 1){
+			unsigned char secret[shared_secret_len];
+			machines.peek(0).derive_shared(machines.peek(1).ecc_pub, secret);
+			char secret_hex[(shared_secret_len*2)+1];
+			bytes_to_hex(secret, shared_secret_len, secret_hex);
+			ESP_LOGI(nih, "secret:%s", secret_hex);
+		}
+		return;
+		char* exec_result = exec("testFunc", "hello, world", machines.peek(0).ID);
+		if(exec_result == nullptr)
+			ESP_LOGI(nih, "exec returned nullptr");
+		else
+			ESP_LOGI(nih, "exec returned: %s", exec_result);
 	}
 	catch (const std::exception& e) {
 		ESP_LOGE(nih, "Exception encountered:%s", e.what());
 	}
 }
-
