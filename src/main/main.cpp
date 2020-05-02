@@ -117,6 +117,16 @@ void init()
 extern "C" void app_main(void)
 {
 	try{
+		/*unsigned char secret[shared_secret_len];
+		memset(secret, 0, shared_secret_len);
+		unsigned char tocrypt[aes_block_size];
+		unsigned char crypted[aes_block_size*2];
+		unsigned char uncrypt[aes_block_size];
+		strcpy((char*)tocrypt, "hello, world");
+		encrypt(secret, tocrypt, aes_block_size, crypted);
+		decrypt(secret, crypted, aes_block_size, uncrypt);
+		ESP_LOGI(nih, "uncrypt: %s", (char*)uncrypt);
+		return;*/
 		init();
 		if(machines.count() > 1){
 			unsigned char secret[shared_secret_len];
@@ -124,6 +134,13 @@ extern "C" void app_main(void)
 			char secret_hex[(shared_secret_len*2)+1];
 			bytes_to_hex(secret, shared_secret_len, secret_hex);
 			ESP_LOGI(nih, "secret:%s", secret_hex);
+			unsigned char clearbuf[aes_block_size * 4];
+			unsigned char cryptbuf[aes_block_size * 5];
+			unsigned char uncryptbuf[aes_block_size * 4];
+			strcpy((char*)clearbuf, "shit shit shit shit shit shit");
+			encrypt(secret, clearbuf, aes_block_size * 4, cryptbuf);
+			decrypt(secret, cryptbuf, aes_block_size * 4, uncryptbuf);
+			ESP_LOGI(nih, "post-crypt:%s", uncryptbuf);
 		}
 		return;
 		char* exec_result = exec("testFunc", "hello, world", machines.peek(0).ID);
