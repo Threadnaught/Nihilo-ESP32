@@ -1,6 +1,7 @@
 #include "Nihilo.h"
 
 #include "mbedtls/aes.h"
+#include <sys/socket.h>
 
 void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_len, unsigned char* encrypted_buf){
 	if(to_encrypt_len % aes_block_size != 0)
@@ -25,4 +26,78 @@ void decrypt(unsigned char* secret, unsigned char* to_decrypt, int to_decrypt_le
 	unsigned char* init_vector = to_decrypt;
 	to_decrypt += aes_block_size;
 	mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, to_decrypt_len, init_vector, to_decrypt, decrypted_buf);
+}
+int calc_true_packet_size(int bodylen){//Round up to the nearest block size, and add one block
+	int blockno = (bodylen + aes_block_size - 1) / aes_block_size;
+	return (blockno + 1) * aes_block_size;
+}
+//run a serve cycle
+void serve(){
+	//c socket boilerplate(create socket, bind socket, listen on socket, accept connection)
+	int listener_no = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+	if(listener_no < 0) 
+		throw std::runtime_error("could not create socket");
+	ESP_LOGI(nih, "Created socket");
+	sockaddr_in addr;
+	memset(&addr, 0, sizeof(sockaddr_in));
+	addr.sin_family = AF_INET;
+	addr.sin_port = htons(7328);
+	addr.sin_addr.s_addr = INADDR_ANY;
+	if(bind(listener_no, (sockaddr*)&addr, sizeof(sockaddr_in)) < 0)
+		throw std::runtime_error("could not bind socket");
+	ESP_LOGI(nih, "Bound socket");
+	listen(listener_no,1);
+	ESP_LOGI(nih, "Listening");
+	sockaddr_in other_addr;
+	socklen_t other_len = sizeof(sockaddr_in);
+	int connection_no = accept(listener_no, (sockaddr*) &other_addr, &other_len);
+	if(connection_no < 0)
+		throw std::runtime_error("could not accept connection");
+	ESP_LOGI(nih, "Connected");
+	//receive packet:
+	packet_header received_header;
+	read(connection_no, &received_header, sizeof(packet_header));
+	//find destination:
+	int dest = -1;
+	for(int i = 0; i < machines.count(); i++)
+		if(memcmp(machines.peek(i).ecc_pub, received_header.dest_pub, ecc_pub_len)==0){
+			dest = i;
+			break;
+		}
+	if(dest != -1){//if destination has been found, receive the rest of the packet. 
+		int to_receive = calc_true_packet_size(received_header.contents_length);
+		//RECIEVE AND HANDLE PACKET
+	}
+	shutdown(connection_no, SHUT_RDWR);
+	close(connection_no);
+	shutdown(listener_no, SHUT_RDWR);
+	close(listener_no);
+	ESP_LOGI(nih, "Closed");
+}
+//send call request to another device
+void send_call(Machine origin, Machine target, const char* funcname, const char* param){
+	if((!origin.local) || target.local)
+		throw std::runtime_error("origin is not local, or target is local");
+	//find secret:
+	unsigned char secret[shared_secret_len];
+	origin.derive_shared(target.ecc_pub, secret);
+	//create header:
+	packet_header pheader;
+	memcpy(pheader.origin_pub, origin.ecc_pub, ecc_pub_len);
+	memcpy(pheader.dest_pub, target.ecc_pub, ecc_pub_len);
+	//find length of body:
+	int bodylen = strlen(funcname) + 1;
+	bodylen += strlen(param) + 1;
+	pheader.contents_length = bodylen;
+	int true_len = calc_true_packet_size(bodylen);
+	//create body:
+	unsigned char* unencrypted_body = (unsigned char*)malloc(bodylen);
+	strcpy((char*)unencrypted_body, funcname);
+	strcpy((char*)unencrypted_body + strlen(funcname) + 1, funcname);
+	//encrypt body:
+	unsigned char* encrypted_body = (unsigned char*)malloc(true_len);
+	encrypt(secret, unencrypted_body, true_len-aes_block_size, encrypted_body);
+	//create socket:
+
+	delete unencrypted_body;
 }

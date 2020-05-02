@@ -128,7 +128,8 @@ extern "C" void app_main(void)
 		ESP_LOGI(nih, "uncrypt: %s", (char*)uncrypt);
 		return;*/
 		init();
-		if(machines.count() > 1){
+		serve();
+		/*if(machines.count() > 1){
 			unsigned char secret[shared_secret_len];
 			machines.peek(0).derive_shared(machines.peek(1).ecc_pub, secret);
 			char secret_hex[(shared_secret_len*2)+1];
@@ -141,7 +142,7 @@ extern "C" void app_main(void)
 			encrypt(secret, clearbuf, aes_block_size * 4, cryptbuf);
 			decrypt(secret, cryptbuf, aes_block_size * 4, uncryptbuf);
 			ESP_LOGI(nih, "post-crypt:%s", uncryptbuf);
-		}
+		}*/
 		return;
 		char* exec_result = exec("testFunc", "hello, world", machines.peek(0).ID);
 		if(exec_result == nullptr)

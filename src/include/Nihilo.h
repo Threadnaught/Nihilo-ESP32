@@ -19,6 +19,7 @@
 #define ecc_priv_len 32
 #define shared_secret_len 16
 #define aes_block_size 16
+#define tcp_port 7328
 #define nih "nih"
 
 int rng(void* state, unsigned char* outbytes, size_t len);
@@ -28,6 +29,12 @@ void json_to_file(cJSON* towrite, const char* path);
 cJSON* file_to_json(const char* path);
 void save_wasm(unsigned char* ID, unsigned char* wasm, int len);
 int load_wasm(unsigned char* ID, unsigned char** wasm);
+
+struct packet_header{
+	unsigned char origin_pub[ecc_pub_len];
+	unsigned char dest_pub[ecc_pub_len];
+	uint16_t contents_length; //packet true length = (roundup(contents_length/aes_block_size)+1)*aes_block_size
+};
 
 template<typename T> struct list_elem{
 	T elem;
@@ -192,3 +199,5 @@ Machine load_from_memory(char* id_str);
 char* exec(char* name, char* param, unsigned char* ID);
 void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_len, unsigned char* encrypted_buf);
 void decrypt(unsigned char* secret, unsigned char* to_decrypt, int to_decrypt_len, unsigned char* decrypted_buf);
+void serve();
+void send_call(Machine origin, Machine target, const char* funcname, const char* param);
