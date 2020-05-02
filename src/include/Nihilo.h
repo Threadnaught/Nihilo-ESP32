@@ -9,7 +9,6 @@
 #include "esp_log.h"
 #include <cstring>
 #include "esp32/sha.h"
-#include "mbedtls/rsa.h"
 #include "mbedtls/ecdh.h"
 #include "mbedtls/error.h"
 
@@ -19,6 +18,7 @@
 #define ecc_pub_len 32
 #define ecc_priv_len 32
 #define shared_secret_len 16
+#define aes_block_size 16
 #define nih "nih"
 
 int rng(void* state, unsigned char* outbytes, size_t len);
@@ -190,3 +190,5 @@ void register_machine(ip_event_got_ip_t ip_info, char* root_pub_hex);
 void load_non_local(ip_event_got_ip_t ip_info, list<Machine>* list);
 Machine load_from_memory(char* id_str);
 char* exec(char* name, char* param, unsigned char* ID);
+void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_len, unsigned char* encrypted_buf);
+void decrypt(unsigned char* secret, unsigned char* to_decrypt, int to_decrypt_len, unsigned char* decrypted_buf);
