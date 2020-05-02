@@ -1,2 +1,4 @@
 #!/bin/bash
-./create_ap wlp2s0 -c 1 wlp2s0 -c 1 test thisisnotagoodpassword
+python3 server.py &
+./hostap.sh #host the ap
+trap 'kill $(jobs -p)' EXIT #kill server
