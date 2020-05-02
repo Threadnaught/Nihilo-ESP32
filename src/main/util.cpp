@@ -181,8 +181,6 @@ void load_non_local(ip_event_got_ip_t ip_info, list<Machine>* list){
 	delete machine_return_raw;
 }
 
-
-
 Machine load_from_memory(char* id_str) {
 	char fname[40];
 	snprintf(fname, sizeof(fname), "/%s.json", id_str);
