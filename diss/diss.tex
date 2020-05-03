@@ -1,10 +1,13 @@
 \documentclass{article}
 \usepackage[parfill]{parskip}
 \usepackage{url}
+\usepackage{courier}
+\usepackage{glossaries}
+\usepackage{mathtools}
+
 \begin{document}
 
 \section{Abstract}
-
 
 \tableofcontents
 \section{Introduction}
@@ -15,12 +18,13 @@ Microcontrollers, on the other hand, tend to be realtime, with primitive network
 
 As moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
 Because waiting for cheaper hardware is no longer a valid \lq optimization' stratergy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
-Although they are traditionally classified as microcontrollers, but have capabilities which blur the line between the microcontrollers and microprocessors.
+Although they are traditionally classified as microcontrollers, they blur the line between the microcontrollers and microprocessors.
 The \lq super-mircocontroller' used in this project was the Espressif systems ESP-32.
 
 The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution, IO and communication in a simple to use and extensible platform.
 Because implementing an entire platform of this scale is outside of the scope of a single-module dissertation, this project is more a proof-of-concept than a final version.
-
+Concessions have been made to simplicity to allow for experimentation, meaning that no guarantees can be made about security or speed.
+The project aims, however, to be well tested and stable.
 
 \pagebreak
 \section{Literature Review}
@@ -31,7 +35,7 @@ Because implementing an entire platform of this scale is outside of the scope of
 \subsection{Technologies used}
 \subsubsection{ESP-32}
 
-Released in 2016, the ESP-32 is a powerful dual-core microcontroller.
+Released in 2016, the Espressif Systems ESP-32 is a powerful dual-core microcontroller.
 It is based a Cadence IP core, which is in turn based on the Xtensa instruction set \cite{32datasheet}.
 This instruction set is often used for specalist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
 Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
@@ -39,16 +43,16 @@ A comparison between the ESP-32, Arduino Uno (with an ATmega328P mircocontroller
 
 \begin{table}[h]
 \begin{tabular}{l|l|l|l}
-					& Arduino Uno		& ESP-32		& Pixel 3a		\\ \hline
-Clock Frequency		& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
-RAM					& 32 KB				& 520 KB		& 4 GB			\\ \hline
-Networking support	& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
-Rewritable storage	& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
-External SD Card	& N 				& \textbf{Y}	& N				\\ \hline
-Bluetooth			& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
-Crypto engine		& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
-Ethernet			& N 				& \textbf{Y}	& N				\\ \hline
-IO pins				& \textbf{20/22}	& \textbf{39}	& N/A			\\
+						& Arduino Uno		& ESP-32		& Pixel 3a		\\ \hline
+Clock Frequency			& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
+RAM						& 32 KB				& 520 KB		& 4 GB			\\ \hline
+WiFi 					& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
+Hardware multithreading	& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
+Bluetooth				& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
+Rewritable storage		& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
+External SD Card		& N 				& \textbf{Y}	& N				\\ \hline
+Ethernet				& N 				& \textbf{Y}	& N				\\ \hline
+IO pins					& \textbf{20/22}	& \textbf{39}	& N/A			\\
 
 \end{tabular}
 \end{table}
@@ -56,11 +60,112 @@ IO pins				& \textbf{20/22}	& \textbf{39}	& N/A			\\
 \emph{Note: Missing functionality can be added using external electronics}
 
 In addition to the I/O in the above table, the ESP-32 also supports SPI, I\textsuperscript{2}S, I\textsuperscript{2}C, CAN, as well as dedicated hardware for accelerating hashing, encryption, signing, decryption, and cryptographic random number generation.
+The entropy source for the RNG is background noise collected from the RF module.
+
+The ESP-IDF (IoT Development Framework) is a library provided by Espressif systems. It integrates into and extends the dedicated hardware provided by the processor.
+For example, Writing code against the WiFi transceiver requires using the IDF's TCP, UDP, or HTTP library.
+Similarly, cryptography support is provided through the IDF's port of mbedtls, and the SPI flash is exposed through several libraries inside of the IDF.
 
 \subsubsection{SPIFFS}
-\subsubsection{Webassembly}
-\subsection{Implementation}
 
+One particularly useful part of the IDF is SPIFFS (SPI Flash FileSystem).
+It exposes a section of the SPI non-volatile flash storage as a basic filesystem.
+SPIFFS does not support directories, so a file saved as \texttt{/spiffs/a/b/c.txt} would be in the same directory as \texttt{/spiffs/d.txt}.
+SPIFFS also does not support journaling, so if power is removed halfway through a write operation, it must be reformatted.
+This means that the ability to restore from a complete format is important.
+SPIFFS also limits filenames to 31 characters.
+
+The Nihilo platform hides file I/O behind trees of values, objects and arrays, using JSON files.
+The cJson package is included in IDF, and was used for all storage in this project.
+
+\subsubsection{WebAssembly/wasm3}
+
+Although the target of this project is the ESP-32, the goal is for it to be architecture agnostic.
+This includes both running on different instruction sets and running on different types of computer including desktops and servers.
+The problem of targeting different types of device using the same standard is similar to the problem websites were made to solve.
+The environment of the web adds the bonus that browser-based runtimes are sandboxed and have been aggressivley tested for vulnerabilities.
+The traditionally accepted web language, used in both NodeJS and IoT-DSA, is Javascript.
+
+Javascript, though popular, is a bad fit for creating this platform.
+Efficent runtimes are large and are usually themselves very architecture-dependent.
+In addition, embedded developers tend to favour strong, static typing and DIY memory management, historically meaning C but a variety of newer languages such as Rust, Golang, and C++ have also been gaining popularity.
+Emscripten and later WebAssembly were created to enable C-style languages on the web.
+The former compiles code to a highly optimizable subset of Javascript, asm.js, which is backwards compatible with any Javascript engine but runs at near-native speeds in a supported one \cite{asm}.
+The latter is an extension to asm.js which abandons the link to Javascript entirely, compiling code to a new instruction set running on an idealised processor \cite{wasm}.
+
+WebAssembly (often shortened to wasm) is intended to be executed using a AOT (ahead of time)  or JIT (just in time) compiler, translating the abstract wasm instructions into real instructions to be executed on the processor.
+The difference between JIT and AOT is that AOTs translate into code before the program is run, while JITs compile just before the code is executed.
+JITs are generally faster because they can optimize based not just on static analysis but also the actual, runtime values of the variables being used.
+Slower than both types of compiler are interpreters, which iterate over the commands one by one and execute them by calling functions associated with each command.
+Although compilers are prefereable, they are harder to implment, harder to secure, harder to debug, and require porting to each instruction set they must run on.
+Because of wasm's relative immaturity, only two partially implemented runtimes exist for embedded architectures;
+\begin{itemize}
+\item WebAssembly Micro Runtime (WAMR), the official Bytecode Alliance runtime for running webassembly on microcontrollers.
+WAMR can run both in AOT and interpreter mode.
+It WAMR is well implemented, but lacks ESP-IDF support and porting the entire runtime is beyond the scope of this project.
+\item Wasm3, an unofficial interpreter for WebAssembly. 
+Although wasm3 is less professionally implemented, it has excellent support for ESP-IDF.
+Its simplicity also aids in modifications and experiments. 
+\end{itemize}
+
+Wasm3 was chosen for this project.
+
+\subsection{Implementation}
+\subsubsection{Machines}
+
+The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device.
+Communication, execution, and data storage all happen at the machine level.
+Pairs of devices do not communicate, pairs of machines do, whether those machines are on the same physical device or connected over the internet.
+Machines persist data as JSON strings.
+Each machine has a WASM executable stored in SPIFFS.
+Currently, the Nihilo engine only supports two types of JSON objects; (null terminated) strings and objects.
+These are accessed in WASM through two functions, \texttt{void writeString(const char* path, const char* value)} which writes \texttt{value} into the machine's JSON store at \texttt{path}, and \texttt{void readString(const char* path, char** target)} which makes \texttt{*target} point to the value in \texttt{path}.
+
+\subsubsection{Security Model}
+
+For security purposes, machines are sandboxed from eachother, but have absolute power over their internal environment. This is because machines are from a single origin, analogous to how javascript has absolute power over its own HTML under the same origin policy, but can only communicate with others through specific channels. Every machine in Nihilo has an asymmetric keypair. Because every communication in Nihilo has an origin and destination machine, it can be cryptographically verified that;
+\begin{itemize}
+\item The message was sent only by the stated origin.
+\item The message can be read only by the stated destination.
+\end{itemize}
+
+RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this job. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of it's keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
+
+ECDH \cite{ecc} (Elliptic Curve Diffie-Hellman) is a more recent invention than RSA, but it is far more computationally efficent. It has a number of advantages over RSA;
+\begin{itemize}
+\item Keygen is finished in 200ms, a 100 times speedup.
+\item ECDH is not an encryption algorithm, but a key agreement protocol where all of the necassary information is already embedded in the public key of the peer. Both RSA and ECDH need a symmetric encryption algorithm for the bulk exchange of data, but RSA requires a dedicated protocol to send the encrypted symmetric key from one peer to the other while ECDH does not.
+\item ECC curve25519 public and private keys are 32 bytes long, as opposed to at least 128 bytes with RSA.
+\item Every pair of peers has its own secret, which requires the private key of one and the public key of the other. This negates the need for a dedicated signature, which would be required under RSA.
+\end{itemize}
+
+The sum of these advantages is a massively streamlined communication process compared to one implemented using RSA. The 200ms keygen means that machines can be created much faster, while the implicit signature and key exchange negate the need of an SSL-style intermediate layer.
+
+Because the cryptographic verification requires holding the keypair, ownership of the keypair is for all intents and purposes ownership of the machine. The security model breaks down if multiple devices hold the same keypair, so transferring private keys between devices or exposing them to WASM code is \textbf{explicitly forbidden}.
+
+Once ECDH has been run, transforming a keypair of one machine and a public key of the other into a shared secret, the message must be symmetrically encrypted. The algorithm chosen was AES\cite{aes}, an efficent block cipher. AES works one block at a time, applying encryption to 16 bytes, then moving on to the next 16 bytes. The original implementation of AES, called ECB mode, had a flaw where identical blocks were encrypted as identical ciphertext, exposing ECB encryption to a variety of attacks, which were rectified with CBC mode. This mode uses the previous block to help encrypt the next, so requires an initialization vector to randomise the first block.
+
+Because the initialization vector is required to decrypt the data, it is included in Nihilo as the 0th block of any encrypted data. If \(x\) is the length of the unencrypted data and b is the block size (16 bytes), the formula for calculating the length of encrypted data is as follows;
+
+\[ ( \lceil x/b \rceil +1)*b\]
+
+32-byte public keys can be unweildy, for instance SPIFFS filenames are limited to 31 characters long including extension. In order to simplify this, and to make user interface easier, a 12-byte ID can be used. This is the first 12-bytes of the SHA256 digest of the public key. It is worth noting that while creating a fraudulent key with the same ID is extremely computationally intensive, it is not outside the realm of possibility with modern machines, so IDs cannot provide the same security guarantees as public keys. Between devices, Nihilo always uses the full 32 byte public key.
+
+\subsubsection{Tooling}
+
+There are two major peices of tooling that were required to implement Nihilo;
+\begin{itemize}
+\item A pass-through WiFi access point, to streamline network access for the ESP-32s
+\item A directory server, to facilitate discovery of peers
+\end{itemize}
+
+Allowing for a simple connection to private resources is a common problem in developing open-source software. WiFi credentials, API keys and bitcoin addresses are often left in code which is pushed onto public repositories. In order to develop without adding support for Eduroam, and exposing university login details in the code, create\_ap \cite{createap}  was used. This turns WiFi-enabled linux devices into repeaters, taking in one WiFi network while creating another with dependable, specified parameters that can be developed against.
+
+The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. The POST requests take the form;
+
+\texttt{
+	IP\_ADDR:HEX\_PUBLIC\_KEY
+}
 
 \section{Results}
 
@@ -70,6 +175,8 @@ In addition to the I/O in the above table, the ESP-32 also supports SPI, I\texts
 
 \section{Reflection}
 
+\section{Glossary}
+
 
 \section{References}
 \begin{thebibliography}{9}
@@ -77,5 +184,17 @@ In addition to the I/O in the above table, the ESP-32 also supports SPI, I\texts
 	\url{https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf}
 \bibitem{lx6datasheet}
 	\url{https://mirrobo.ru/wp-content/uploads/2016/11/Cadence_Tensillica_Xtensa_LX6_ds.pdf}
+\bibitem{asm}
+	\url{http://asmjs.org/spec/latest/}
+\bibitem{wasm}
+	\url{https://webassembly.github.io/spec/core/_download/WebAssembly.pdf}
+\bibitem{rsa}
+	\url{https://people.csail.mit.edu/rivest/Rsapaper.pdf}
+\bibitem{ecc}
+	\url{https://www.ams.org/journals/mcom/1987-48-177/S0025-5718-1987-0866109-5/S0025-5718-1987-0866109-5.pdf}
+\bibitem{aes}
+	\url{https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf}
+\bibitem{createap}
+	\url{https://github.com/oblique/create_ap}
 \end{thebibliography}
 \end{document}
