@@ -125,7 +125,7 @@ extern "C" void app_main(void)
 		else
 			send_call(machines.peek(0), machines.peek(1), nullptr, nullptr, nullptr, nullptr);
 		return;*/
-		queue_copy(machines.peek(0).ecc_pub, machines.peek(0).ecc_pub, "entry", "hello, world", "success", "failure");
+		queue_copy(machines.peek(0).ecc_pub, machines.peek(0).ecc_pub, "errrrrrr", "hello, world", "success", "error");
 		empty_queue();
 	}
 	catch (const std::exception& e) {

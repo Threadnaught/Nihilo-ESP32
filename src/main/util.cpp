@@ -215,5 +215,6 @@ int load_wasm(unsigned char* ID, unsigned char** wasm){
 	unsigned char* file_json = (unsigned char*)malloc(root_len + 1);
 	fread(file_json, 1, root_len, file);
 	*wasm = file_json;
+	fclose(file);
 	return root_len;
 }

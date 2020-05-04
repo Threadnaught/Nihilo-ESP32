@@ -4,3 +4,4 @@ mallocWasm
 writeString
 readString
 knownIds
+logStr

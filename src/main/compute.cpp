@@ -17,7 +17,8 @@ char* popPair(list<key_value_pair<IM3Runtime, char*>>* list, IM3Runtime target){
 	for(int i = 0; i < list->count(); i++){
 		auto kvp = list->peek(i);
 		if (kvp.key == target){
-			return list->pop(i).value;
+			list->pop(i);
+			return kvp.value;
 		}
 	}
 	return nullptr;
@@ -153,7 +154,7 @@ m3ApiRawFunction(nih_read_string)//passed path and pointer to output
 	*y = m3ApiPtrToOffset(ret);
 	m3ApiSuccess();
 }
-m3ApiRawFunction(nih_get_known) // int knownIds(unsigned char** IdsOut, int include_local, int include_non_local);
+m3ApiRawFunction(nih_get_known)
 {
 	m3ApiReturnType(int32_t);
 	m3ApiGetArg(u32, IdsOut);
@@ -166,9 +167,11 @@ m3ApiRawFunction(nih_get_known) // int knownIds(unsigned char** IdsOut, int incl
 			machine_list.add(m);
 	}
 	unsigned char* toret = (unsigned char*)malloc_runtime(ecc_pub_len * machine_list.count(), runtime);
+	for(int i = 0; i < machine_list.count(); i++){
+		memcpy(toret + (i*ecc_pub_len), machine_list.peek(i).ecc_pub, ecc_pub_len);
+	}
 	u32* y = (u32*)m3ApiOffsetToPtr(IdsOut);//offset to x
 	*y = m3ApiPtrToOffset(toret);
-	ESP_LOGI(nih, "list len:%i", machine_list.count());
 	m3ApiReturn(machine_list.count());
 }
 m3ApiRawFunction(nih_log)
@@ -177,11 +180,20 @@ m3ApiRawFunction(nih_log)
 	ESP_LOGI(nih, "%s", (char*)m3ApiOffsetToPtr(tolog));
 	m3ApiSuccess();
 }
+#define checkerr(result, stage) if(result) {\
+	popPair(*all_params.acquire(), runtime); all_params.release();\
+	popPair(*all_rets.acquire(), runtime); all_rets.release();\
+	popPair(*all_ids.acquire(), runtime); all_ids.release();\
+	m3_FreeRuntime(runtime); \
+	m3_FreeEnvironment(env); \
+	ESP_LOGE(nih, "error at %s", stage);\
+	throw std::runtime_error(result);\
+}
 //calling function has responsibility for cleaning up both parameter and return value!!!
 char* run_wasm(char* name, char* param, unsigned char* ID)
 {
 	IM3Environment env = m3_NewEnvironment ();
-	IM3Runtime runtime = m3_NewRuntime (env, 10*1024, nullptr);
+	IM3Runtime runtime = m3_NewRuntime (env, 5*1024, nullptr);
 
 	list<key_value_pair<IM3Runtime, char*>>* params = *all_params.acquire();
 	params->add(key_value_pair<IM3Runtime, char*>(runtime, param));
@@ -196,9 +208,9 @@ char* run_wasm(char* name, char* param, unsigned char* ID)
 	IM3Module module;
 	M3Result result = m3_ParseModule (env, &module, (uint8_t*)wasm, wasm_length - 1);
 	delete wasm;
-	if(result) ESP_LOGE(nih, "result 1:%s", result);
+	checkerr(result, "parse");
 	result = m3_LoadModule (runtime, module);
-	if(result) ESP_LOGE(nih, "result 2:%s", result);
+	checkerr(result, "load");
 	result = m3_LinkRawFunction (module, "nih", "getParam", "v(*)", &nih_get_param);
 	result = m3_LinkRawFunction (module, "nih", "setReturn", "v(*)", &nih_return);
 	result = m3_LinkRawFunction (module, "nih", "mallocWasm", "v(*i)", &nih_malloc);
@@ -211,10 +223,10 @@ char* run_wasm(char* name, char* param, unsigned char* ID)
 	strcpy(fullname, "wrapper_");
 	strcpy(fullname + strlen(fullname), name);
 	result = m3_FindFunction (&func, runtime, fullname);
-	if(result) ESP_LOGE(nih, "result 8:%s", result);
+	checkerr(result, "find");
 	const char* char_args[] = { nullptr };
 	result = m3_CallWithArgs (func, 0, char_args);
-	if(result) ESP_LOGE(nih, "result 9:%s", result);
+	checkerr(result, "call");
 	//cleanup/return:
 	list<key_value_pair<IM3Runtime, char*>>* rets = *all_rets.acquire();
 	char* ret = popPair(rets, runtime);
@@ -222,14 +234,8 @@ char* run_wasm(char* name, char* param, unsigned char* ID)
 	ids = *all_ids.acquire();
 	popPair(ids, runtime);
 	all_ids.release();
-
-
-	
 	m3_FreeRuntime(runtime);
 	m3_FreeEnvironment(env);
-
-	
-
 	return ret;
 }
 
@@ -276,13 +282,15 @@ void exec(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, ch
 			if(m.local){
 				try{
 					char* response = run_wasm(funcname, param, m.ID);
-					if(onsuccess != nullptr){
+					if(onsuccess != nullptr)
 						queue_copy(dest_pub, origin_pub, onsuccess, response, nullptr, nullptr);
-					}
-					if(response != nullptr) delete response;
+					if(response != nullptr) 
+						delete response;
 				}
 				catch (const std::exception& e) {
-					queue_copy(dest_pub, origin_pub, onfailure, nullptr, nullptr, nullptr);
+					ESP_LOGE(nih, "execution exception in function %s: %s", funcname, e.what());
+					if(onfailure != nullptr)
+						queue_copy(dest_pub, origin_pub, onfailure, "execution exception", nullptr, nullptr);
 				}
 				return;
 			}

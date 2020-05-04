@@ -30,7 +30,7 @@ extern "C" {
 	char* NAME(char* PARAMNAME) /*allow developer to implement their own function*/
 
 //int to string:
-char* decstr(int input, bool b=true){
+char* decstr(int input){
 	char buf[50];
 	for(int i = 0; i < 49; i++)buf[i] = 0;
 	bool neg = input < 0;
