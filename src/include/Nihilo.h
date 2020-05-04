@@ -83,6 +83,13 @@ template<typename T> struct list{
 		delete l_elem;
 		return ret;
 	}
+	void empty(){
+		while(count() > 0)
+			pop();
+	}
+	~ list(){
+		empty();
+	}
 };
 
 template<typename T0, typename T1> struct key_value_pair{
@@ -196,8 +203,11 @@ ip_event_got_ip_t connect_wifi(const char* ssid, const char* psk);
 void register_machine(ip_event_got_ip_t ip_info, char* root_pub_hex);
 void load_non_local(ip_event_got_ip_t ip_info, list<Machine>* list);
 Machine load_from_memory(char* id_str);
-char* exec(char* name, char* param, unsigned char* ID);
+void exec(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure);
 void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_len, unsigned char* encrypted_buf);
 void decrypt(unsigned char* secret, unsigned char* to_decrypt, int to_decrypt_len, unsigned char* decrypted_buf);
 void serve();
-void send_call(Machine origin, Machine target, const char* funcname, const char* param);
+void send_call(Machine origin, Machine target, const char* funcname, const char* param, const char* onsuccess, const char* onfailure);
+void queue_task(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure);
+void queue_copy(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure);
+void empty_queue();

@@ -92,7 +92,7 @@ void serve(){
 	ESP_LOGI(nih, "Closed");
 }
 //send call request to another device
-void send_call(Machine origin, Machine target, const char* funcname, const char* param){//, const char* onsuccess, const char* onfailure
+void send_call(Machine origin, Machine target, const char* funcname, const char* param, const char* onsuccess, const char* onfailure){
 	if((!origin.local) || target.local)
 		throw std::runtime_error("origin is not local, or target is local");
 	//find length of body:

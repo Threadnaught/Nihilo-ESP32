@@ -118,18 +118,15 @@ extern "C" void app_main(void)
 {
 	try{
 		init();
-		ESP_LOGI(nih, "machine count:%i", machines.count());
+		/*ESP_LOGI(nih, "machine count:%i", machines.count());
 		if(machines.count() == 1){
 			serve();
 		}
 		else
-			send_call(machines.peek(0), machines.peek(1), nullptr, nullptr);
-		return;
-		char* exec_result = exec("testFunc", "hello, world", machines.peek(0).ID);
-		if(exec_result == nullptr)
-			ESP_LOGI(nih, "exec returned nullptr");
-		else
-			ESP_LOGI(nih, "exec returned: %s", exec_result);
+			send_call(machines.peek(0), machines.peek(1), nullptr, nullptr, nullptr, nullptr);
+		return;*/
+		queue_copy(machines.peek(0).ecc_pub, machines.peek(0).ecc_pub, "entry", "hello, world", "success", "failure");
+		empty_queue();
 	}
 	catch (const std::exception& e) {
 		ESP_LOGE(nih, "Exception encountered:%s", e.what());
