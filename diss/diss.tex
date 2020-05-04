@@ -4,6 +4,7 @@
 \usepackage{courier}
 \usepackage{glossaries}
 \usepackage{mathtools}
+\usepackage{xcolor}
 
 \begin{document}
 
@@ -42,7 +43,7 @@ Although it is RISC, it generally complies programs into fewer instructions than
 A comparison between the ESP-32, Arduino Uno (with an ATmega328P mircocontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
 \begin{table}[h]
-\begin{tabular}{l|l|l|l}
+\begin{tabular}{l|lll}
 						& Arduino Uno		& ESP-32		& Pixel 3a		\\ \hline
 Clock Frequency			& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
 RAM						& 32 KB				& 520 KB		& 4 GB			\\ \hline
@@ -113,13 +114,13 @@ Wasm3 was chosen for this project.
 \subsection{Implementation}
 \subsubsection{Machines}
 
-The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device.
-Communication, execution, and data storage all happen at the machine level.
-Pairs of devices do not communicate, pairs of machines do, whether those machines are on the same physical device or connected over the internet.
-Machines persist data as JSON strings.
-Each machine has a WASM executable stored in SPIFFS.
-Currently, the Nihilo engine only supports two types of JSON objects; (null terminated) strings and objects.
+The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another. They are addressed by a keypair, and store code and data as JSON and WASM in the SPI flash using SPIFFS.
+
+\textcolor{red}{MOVE TO API}
+
 These are accessed in WASM through two functions, \texttt{void writeString(const char* path, const char* value)} which writes \texttt{value} into the machine's JSON store at \texttt{path}, and \texttt{void readString(const char* path, char** target)} which makes \texttt{*target} point to the value in \texttt{path}.
+
+\textcolor{red}{ \textbackslash MOVE TO API}
 
 \subsubsection{Security Model}
 
@@ -147,9 +148,33 @@ Once ECDH has been run, transforming a keypair of one machine and a public key o
 
 Because the initialization vector is required to decrypt the data, it is included in Nihilo as the 0th block of any encrypted data. If \(x\) is the length of the unencrypted data and b is the block size (16 bytes), the formula for calculating the length of encrypted data is as follows;
 
-\[ ( \lceil x/b \rceil +1)*b\]
+\[ ( \lceil x/b \rceil +1) \times b\]
 
-32-byte public keys can be unweildy, for instance SPIFFS filenames are limited to 31 characters long including extension. In order to simplify this, and to make user interface easier, a 12-byte ID can be used. This is the first 12-bytes of the SHA256 digest of the public key. It is worth noting that while creating a fraudulent key with the same ID is extremely computationally intensive, it is not outside the realm of possibility with modern machines, so IDs cannot provide the same security guarantees as public keys. Between devices, Nihilo always uses the full 32 byte public key.
+32-byte public keys can be unweildy, for instance SPIFFS filenames are limited to 31 characters long including extension. In order to simplify this, and to make user interface easier, a 12-byte ID can be used. This is the first 12-bytes of the SHA256 digest of the public key. It is worth noting that while creating a fraudulent key with the same ID is extremely computationally intensive, it is not outside the realm of possibility with future machines, so IDs cannot provide the same security guarantees as public keys. Between devices, Nihilo always uses the full 32 byte public key.
+
+The most important factor in creating a random identifier is minimizing the risk that two entities are randomly assigned the same ID. Poorly engineered identification schemes are vulnerable to a class of exploits known as birthday attacks, in which a forged entity that happens to have the same ID can impersonate the target entity. Thanks to the pigeonhole principle\cite{pigeon}, it is known that any mapping which reduces a large space (all public keys) down to a smaller space (all IDs) must have distinct items in the large space which map to the same item in the small one. In the context of hashing, this is known as a hash collision.
+
+Protecting against a targeted birthday attack, attempting to forge an ID for one specific target, can be acheived with an 8-byte ID, corresponding to a search space \( 2^{8 \times 8} \) hashes wide. If it was possible to check at a rate of 1,000,000 hashes per second, the search space would be exhausted after more than 500,000 years.
+
+It is, however, insufficient to ensure that attackers cannot artificially create a fraudulent ID. The 12-byte length of the ID was not chosen to prevent brute forcing of a \textbf{specific ID}, but to prevent any \textbf{pair of IDs} happening to be identical. This is both more likely on a per-ID basis and happens more often, every time a machine is created on any device. Assuming the hardware random number generator and SHA256 algorithm are both mathematically ideal, the ID space is \( 2^{12 \times 8} \) hashes wide. If \( p \) is the number of assigned hashes, the probability that there exists at least one pair which are the same, \( n \), is approximated by the following formula\cite{birth};
+
+\[ n = \sqrt{2 \times 2^{12 \times 8} \times ln\frac{1}{1-p}}\]
+
+Collision probabilitiies are given by the following table
+\begin{table}[h]
+\begin{tabular}{l|l|l}
+p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
+\( 10^{-10}\)	&\( 1.26 \times 10^{10}\)	& every person alive today (\( 7.8 \times 10^{9}\))\\
+\( 10^{-7}\)	&\( 1.26 \times 10^{11}\)	& every person who has ever lived (\( 1.09 \times 10^{11}\)) \\
+0.01			&\( 3.99 \times 10^{13}\)	& every red blood cell in the human body (\( 2.63 \times 10^{13}\)) \\
+0.1				&\( 1.29 \times 10^{14}\)	& every cell in the human body (including bacteria) (\( 10^{14}\))
+
+12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue.
+
+\end{tabular}
+\end{table}
+
+\subsubsection{Communication and packet structure}
 
 \subsubsection{Tooling}
 
@@ -159,13 +184,39 @@ There are two major peices of tooling that were required to implement Nihilo;
 \item A directory server, to facilitate discovery of peers
 \end{itemize}
 
-Allowing for a simple connection to private resources is a common problem in developing open-source software. WiFi credentials, API keys and bitcoin addresses are often left in code which is pushed onto public repositories. In order to develop without adding support for Eduroam, and exposing university login details in the code, create\_ap \cite{createap}  was used. This turns WiFi-enabled linux devices into repeaters, taking in one WiFi network while creating another with dependable, specified parameters that can be developed against.
+Allowing for a simple connection to private resources is a common problem in developing open-source software. WiFi credentials, API keys and bitcoin addresses are often left in code which is pushed into public repositories. In order to develop without adding support for Eduroam, and exposing university login details in the code, create\_ap \cite{createap}  was used. This turns WiFi-enabled linux computers into repeaters, taking in one WiFi network while creating another with dependable, specified parameters that can be developed against.
 
-The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. The POST requests take the form;
+The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. To simplify handling, the server will only send back machines belonging to other devices. The POST requests take the form;
 
-\texttt{
-	IP\_ADDR:HEX\_PUBLIC\_KEY
+\texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}
+
+Responses take the form;
+
+\texttt{4 \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY
 }
+
+On boot, the Nihilo runtime registers known machines to this service, and queries it for those belonging to other devices.
+
+\subsubsection{Adding a simple heap to wasm3}
+
+One serious shortcoming in the wasm3 interpreter, which is not documented in their git repository, is the lack of runtime-allocated memory. The \texttt{void* malloc(size\_t size)} call in which memory is dynamically allocated from the heap, has not been implemented. Although only call-stack based memory is necassary for turing-completeness, heap-based memory can simplify programming.
+
+Wasm3 allocates memory in 65536 byte pages.
+In order to maintain the integrity of the sandbox, accessing memory outside of these pages halts execution, so any implementation of malloc must return a pointer somewhere inside of this page. The Nihilo runtime is built on small functions, which are instantiated, run, and asynchronously instantiate other functions. Each individual function has a very small memory footprint, and each wasm3 runtime exsits for a short period of time.
+
+It was decided, as a consequence of the small memory footprint of each function, and the limitations to where memory can be allocated, to reserve page offsets 0x0000 to 0x7FFF (32768 bytes) for the stack, and to reserve offsets 0x8000 to 0xFFFF (32767 bytes) for a heap. Because these pages are cleaned up after a short time, no mechanism for freeing memory was created. A \texttt{uint16\_t} at page offset 0x8000 tracks the amount of allocated heap, and is incremented every time more is allocated. Breaking the Nihilo coding model, and creating highly recursive functions, or functions which allocated and freed a lot of memory, would in turn break this memory allocation scheme.
+
+
+\subsubsection{Task queue}
+
+\subsubsection{Example communication}
+
+\subsubsection{Nihilo WASM API}
+
 
 \section{Results}
 
@@ -196,5 +247,9 @@ The other component was an HTTP-based directory server, implemented in python. T
 	\url{https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf}
 \bibitem{createap}
 	\url{https://github.com/oblique/create_ap}
+\bibitem{birth}
+	\url{http://www.winlab.rutgers.edu/comnet2/Reading/documents/Birthday_attack.pdf}
+\bibitem{pigeon}
+	\url{https://www.math.ust.hk/~mabfchen/Math391I/Pigeonhole.pdf}
 \end{thebibliography}
 \end{document}
