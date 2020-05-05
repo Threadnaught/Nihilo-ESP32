@@ -3,6 +3,7 @@
 #include "mbedtls/aes.h"
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_len, unsigned char* encrypted_buf){
 	if(to_encrypt_len % aes_block_size != 0)
@@ -39,16 +40,16 @@ void serve(){
 	if(listener_no < 0) 
 		throw std::runtime_error("could not create socket");
 	ESP_LOGI(nih, "Created socket");
+	//allow socket reuse:
+	int reuse = 1;
+	if(setsockopt(listener_no, SOL_SOCKET, SO_REUSEADDR, (void*) &reuse, sizeof(int)) < 0)
+		throw std::runtime_error("could reuse");
 	sockaddr_in addr;
 	memset(&addr, 0, sizeof(sockaddr_in));
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(tcp_port);
 	addr.sin_addr.s_addr = INADDR_ANY;
 	if(bind(listener_no, (sockaddr*)&addr, sizeof(sockaddr_in)) < 0)
-		throw std::runtime_error("could not bind socket");
-	//allow socket reuse:
-	int reuse = 1;
-	if(setsockopt(listener_no, SOL_SOCKET, SO_REUSEADDR, (void*) &reuse, sizeof(int)) < 0)
 		throw std::runtime_error("could not bind socket");
 	ESP_LOGI(nih, "Bound socket");
 	listen(listener_no,1);
@@ -86,8 +87,33 @@ void serve(){
 				char* onsuccess = (char*)unencrypted_body + ID_len + max_func_len;
 				char* onfailure = (char*)unencrypted_body + ID_len + (max_func_len * 2);
 				char* param = (char*)unencrypted_body + ID_len + (max_func_len * 3);
-				if(memcmp(IDTgt, machines.peek(dest).ID, ID_len) == 0){
-					ESP_LOGI(nih, "received %s(%s), %s, %s", funcname, param, onsuccess, onfailure);
+				if(memcmp(IDTgt, machines.peek(dest).ID, ID_len) == 0){//ensure that this packet is valid
+					sockaddr_in origin_addr;
+					socklen_t len = sizeof(origin_addr);
+					getpeername(connection_no, (sockaddr*)&origin_addr, &len);
+					char origin_ip[20];
+					inet_ntop(AF_INET, &(origin_addr.sin_addr), origin_ip, 20);
+					bool found = false;
+					for(int i = 0; i < machines.count(); i++){
+						if(memcmp(machines.peek(i).ecc_pub, received_header.origin_pub, ecc_pub_len) == 0){//machine was already here
+							if(strcmp(machines.peek(i).IP, origin_ip) != 0){//machine has updated IP
+								Machine m = machines.pop(i);
+								strcpy(m.IP, origin_ip);
+								machines.add(m);
+							}
+							found = true;
+							break;
+						}
+					}
+					if(!found){//machine was not known before
+						char descrip[100];
+						char pub_hex[80];
+						bytes_to_hex(received_header.origin_pub, ecc_pub_len, pub_hex);
+						snprintf(descrip, sizeof(descrip), "%s:%s", origin_ip, pub_hex);
+						ESP_LOGI(nih, "Adding machine with descriptor %s", descrip);
+						machines.add(Machine(descrip));
+					}
+					//ESP_LOGI(nih, "received %s(%s), %s, %s", funcname, param, onsuccess, onfailure);
 					//catch nullptrs and fuckups:
 					if(strlen(funcname) == 0 || strlen(funcname) >= max_func_len) 
 						funcname = nullptr;
