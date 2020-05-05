@@ -46,6 +46,10 @@ void serve(){
 	addr.sin_addr.s_addr = INADDR_ANY;
 	if(bind(listener_no, (sockaddr*)&addr, sizeof(sockaddr_in)) < 0)
 		throw std::runtime_error("could not bind socket");
+	//allow socket reuse:
+	int reuse = 1;
+	if(setsockopt(listener_no, SOL_SOCKET, SO_REUSEADDR, (void*) &reuse, sizeof(int)) < 0)
+		throw std::runtime_error("could not bind socket");
 	ESP_LOGI(nih, "Bound socket");
 	listen(listener_no,1);
 	ESP_LOGI(nih, "Listening");
@@ -54,11 +58,7 @@ void serve(){
 	int connection_no = accept(listener_no, (sockaddr*) &other_addr, &other_len);
 	if(connection_no < 0)
 		throw std::runtime_error("could not accept connection");
-	//stop listening for new connections:
-	shutdown(listener_no, SHUT_RDWR);
-	close(listener_no);
 	ESP_LOGI(nih, "Connected");
-
 	//receive packet:
 	packet_header received_header;
 	read(connection_no, &received_header, sizeof(packet_header));
@@ -72,41 +72,80 @@ void serve(){
 	if(dest != -1){//if destination has been found, receive the rest of the packet. 
 		int to_receive = calc_true_packet_size(received_header.contents_length);
 		unsigned char* encrypted_body = (unsigned char*)malloc(to_receive);
+		ESP_LOGI(nih, "receiving");
 		int n = read(connection_no, encrypted_body, to_receive);
+		ESP_LOGI(nih, "read");
 		unsigned char secret[shared_secret_len];
 		machines.peek(dest).derive_shared(received_header.origin_pub, secret);
 		if(n == to_receive){//if the correct number of bytes have been read, decrypt packet
 			unsigned char* unencrypted_body = (unsigned char*)malloc(to_receive-aes_block_size);
 			decrypt(secret, encrypted_body, to_receive-aes_block_size, unencrypted_body);
-			ESP_LOGI(nih, "Received:%s", (char*)unencrypted_body);
+			if(unencrypted_body[calc_true_packet_size(received_header.contents_length)-aes_block_size-1] == 0){ //prevent buffer overflow
+				unsigned char* IDTgt = unencrypted_body;
+				char* funcname = (char*)unencrypted_body + ID_len;
+				char* onsuccess = (char*)unencrypted_body + ID_len + max_func_len;
+				char* onfailure = (char*)unencrypted_body + ID_len + (max_func_len * 2);
+				char* param = (char*)unencrypted_body + ID_len + (max_func_len * 3);
+				if(memcmp(IDTgt, machines.peek(dest).ID, ID_len) == 0){
+					ESP_LOGI(nih, "received %s(%s), %s, %s", funcname, param, onsuccess, onfailure);
+					//catch nullptrs and fuckups:
+					if(strlen(funcname) == 0 || strlen(funcname) >= max_func_len) 
+						funcname = nullptr;
+					if(strlen(onsuccess) == 0 || strlen(onsuccess) >= max_func_len) 
+						onsuccess = nullptr;
+					if(strlen(onfailure) == 0 || strlen(onfailure) >= max_func_len) 
+						onfailure = nullptr;
+					if(strlen(param) == 0) 
+						param = nullptr;
+					queue_copy(received_header.origin_pub, received_header.dest_pub, funcname, param, onsuccess, onfailure);
+				}
+				else
+					ESP_LOGE(nih, "Target ID does not match target pub");
+			}
+			else
+				ESP_LOGE(nih, "Received message does not end with 0");
 			delete unencrypted_body;
 		}
 		else
-			ESP_LOGI(nih, "Wrong number of bytes");
+			ESP_LOGE(nih, "Wrong number of bytes");
 		delete encrypted_body;
 	}
 	else
 		ESP_LOGI(nih, "can't find dest");
 	shutdown(connection_no, SHUT_RDWR);
 	close(connection_no);
+	//stop listening for new connections:
+	shutdown(listener_no, SHUT_RDWR);
+	close(listener_no);
 	ESP_LOGI(nih, "Closed");
 }
 //send call request to another device
 void send_call(Machine origin, Machine target, const char* funcname, const char* param, const char* onsuccess, const char* onfailure){
 	if((!origin.local) || target.local)
 		throw std::runtime_error("origin is not local, or target is local");
-	//find length of body:
-	/*int bodylen = strlen(funcname) + 1;
-	bodylen += strlen(param) + 1;
-	pheader.contents_length = bodylen;
-	int true_len = calc_true_packet_size(bodylen);
-	//create body:
-	unsigned char* unencrypted_body = (unsigned char*)malloc(bodylen);
-	strcpy((char*)unencrypted_body, funcname);
-	strcpy((char*)unencrypted_body + strlen(funcname) + 1, funcname);
-	//encrypt body:
-	unsigned char* encrypted_body = (unsigned char*)malloc(true_len);
-	encrypt(secret, unencrypted_body, true_len-aes_block_size, encrypted_body);*/
+	//create header:
+	packet_header pheader;
+	memcpy(pheader.origin_pub, origin.ecc_pub, ecc_pub_len);
+	memcpy(pheader.dest_pub, target.ecc_pub, ecc_pub_len);
+	//calc body length:
+	pheader.contents_length = ID_len + (max_func_len * 3) + (param==nullptr?0:strlen(param)) + 2;
+	//copy body over:
+	unsigned char* unencrypted_body = (unsigned char*)malloc(calc_true_packet_size(pheader.contents_length)-aes_block_size);
+	memset(unencrypted_body, 0, calc_true_packet_size(pheader.contents_length)-aes_block_size);
+	memcpy(unencrypted_body, target.ID, ID_len);
+	strncpy((char*)(unencrypted_body + ID_len), funcname, max_func_len-1);
+	if(onsuccess != nullptr)
+		strncpy((char*)(unencrypted_body + ID_len + max_func_len), onsuccess, max_func_len-1);
+	if(onfailure != nullptr)
+		strncpy((char*)(unencrypted_body + ID_len + (max_func_len * 2)), onfailure, max_func_len-1);
+	if(param != nullptr)
+		strcpy((char*)(unencrypted_body + ID_len + (max_func_len * 3)), param);
+
+
+	char blap[1000];
+	bytes_to_hex(unencrypted_body, calc_true_packet_size(pheader.contents_length)-aes_block_size, blap);
+	ESP_LOGI(nih, "hex:%s", blap);
+
 	//create socket:
 	int connection_no = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	if(connection_no < 0) 
@@ -121,30 +160,18 @@ void send_call(Machine origin, Machine target, const char* funcname, const char*
 	target_addr.sin_port = htons(tcp_port);
 	if(connect(connection_no, (sockaddr*)&target_addr, sizeof(sockaddr_in)) < 0)
 		throw std::runtime_error("Failed to connect");
-
 	//find secret:
 	unsigned char secret[shared_secret_len];
 	origin.derive_shared(target.ecc_pub, secret);
-	//create header:
-	packet_header pheader;
-	memcpy(pheader.origin_pub, origin.ecc_pub, ecc_pub_len);
-	memcpy(pheader.dest_pub, target.ecc_pub, ecc_pub_len);
-
-	
-	const char* towrite = "Blap Blap Blap I've been encrypted";
-	pheader.contents_length = strlen(towrite)+1;
-	int body_true_size = calc_true_packet_size(pheader.contents_length);
-	unsigned char* unencrypted_body = (unsigned char*)malloc(body_true_size-aes_block_size);
-	unsigned char* encrypted_body = (unsigned char*)malloc(body_true_size);
-	strcpy((char*)unencrypted_body, towrite);
-	encrypt(secret, unencrypted_body, body_true_size-aes_block_size, encrypted_body);
+	//encrypt body and write:
+	unsigned char* encrypted_body = (unsigned char*)malloc(calc_true_packet_size(pheader.contents_length));
+	encrypt(secret, unencrypted_body, calc_true_packet_size(pheader.contents_length)-aes_block_size, encrypted_body);
 	write(connection_no, &pheader, sizeof(pheader));
-	write(connection_no, encrypted_body, body_true_size);
-	
-	
+	write(connection_no, encrypted_body, calc_true_packet_size(pheader.contents_length));
+	//end
 	shutdown(connection_no, SHUT_RDWR);
 	close(connection_no);
-	delete target_ent;
+	//delete target_ent;//seems to be an issue????
 	delete unencrypted_body;
 	delete encrypted_body;
 }

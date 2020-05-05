@@ -113,20 +113,22 @@ void init()
 	cJSON_Delete(root);
 	ESP_LOGI(nih, "Nihilo init successful");
 }
-
+int prevserve;
 extern "C" void app_main(void)
 {
 	try{
 		init();
-		/*ESP_LOGI(nih, "machine count:%i", machines.count());
-		if(machines.count() == 1){
-			serve();
-		}
+		if(machines.count() == 1)
+			while(true){
+				empty_queue();
+				serve();
+				prevserve = esp_timer_get_time();
+				while(esp_timer_get_time() < (prevserve + 50000));
+			}
 		else
-			send_call(machines.peek(0), machines.peek(1), nullptr, nullptr, nullptr, nullptr);
-		return;*/
-		queue_copy(machines.peek(0).ecc_pub, machines.peek(0).ecc_pub, "errrrrrr", "hello, world", "success", "error");
-		empty_queue();
+			send_call(machines.peek(0), machines.peek(1), "entry", nullptr, nullptr, nullptr);
+		//queue_copy(machines.peek(0).ecc_pub, machines.peek(0).ecc_pub, "errrrrrr", "hello, world", "success", "error");
+		//empty_queue();
 	}
 	catch (const std::exception& e) {
 		ESP_LOGE(nih, "Exception encountered:%s", e.what());

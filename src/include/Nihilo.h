@@ -20,6 +20,7 @@
 #define shared_secret_len 16
 #define aes_block_size 16
 #define tcp_port 7328
+#define max_func_len 30
 #define nih "nih"
 
 int rng(void* state, unsigned char* outbytes, size_t len);
