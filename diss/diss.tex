@@ -146,6 +146,8 @@ There are two desired capabilities of any asymmetric encryption scheme; security
 \item A hybrid approach, where trust is rooted in SSL but becomes transferred to Nihilo at some point down the chain to the device attempting to authenticate.
 \end{itemize}
 
+Ultimatley, the alternative to building a PKI chosen was using the public keys as the primary identifier of a machine. Because there is no known mechanism to efficently forge a public key, the resulting keys are almost guaranteed to be unique.
+
 Once ECDH has been run, transforming a keypair of one machine and a public key of the other into a shared secret, the message must be symmetrically encrypted. The algorithm chosen was AES\cite{aes}, an efficent block cipher. AES works one block at a time, applying encryption to 16 bytes, then moving on to the next 16 bytes. The original implementation of AES, called ECB mode, had a flaw where identical blocks were encrypted as identical ciphertext, exposing ECB encryption to a variety of attacks, which were rectified with CBC mode. This mode uses the previous block to help encrypt the next, so requires an initialization vector to randomise the first block.
 
 Because the initialization vector is required to decrypt the data, it is included in Nihilo as the 0th block of any encrypted data. If \(x\) is the length of the unencrypted data and b is the block size (16 bytes), the formula for calculating the length of encrypted data is as follows;
