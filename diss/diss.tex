@@ -114,13 +114,7 @@ Wasm3 was chosen for this project.
 \subsection{Implementation}
 \subsubsection{Machines}
 
-The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another. They are addressed by a keypair, and store code and data as JSON and WASM in the SPI flash using SPIFFS.
-
-\textcolor{red}{MOVE TO API}
-
-These are accessed in WASM through two functions, \texttt{void writeString(const char* path, const char* value)} which writes \texttt{value} into the machine's JSON store at \texttt{path}, and \texttt{void readString(const char* path, char** target)} which makes \texttt{*target} point to the value in \texttt{path}.
-
-\textcolor{red}{ \textbackslash MOVE TO API}
+The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another, using remote procedure calls. Permanent storage for both data as JSON, and code as WASM is provided by the SPIFFS flash filesystem.
 
 \subsubsection{Security Model}
 
@@ -167,14 +161,13 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 \( 10^{-10}\)	&\( 1.26 \times 10^{10}\)	& every person alive today (\( 7.8 \times 10^{9}\))\\
 \( 10^{-7}\)	&\( 1.26 \times 10^{11}\)	& every person who has ever lived (\( 1.09 \times 10^{11}\)) \\
 0.01			&\( 3.99 \times 10^{13}\)	& every red blood cell in the human body (\( 2.63 \times 10^{13}\)) \\
-0.1				&\( 1.29 \times 10^{14}\)	& every cell in the human body (including bacteria) (\( 10^{14}\))
-
-12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue.
+0.1				&\( 1.29 \times 10^{14}\)	& every cell in a human body (including bacteria) (\( 10^{14}\))
 
 \end{tabular}
 \end{table}
+\pagebreak
 
-\subsubsection{Communication and packet structure}
+12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue, so there is much room for expansion.
 
 \subsubsection{Tooling}
 
@@ -199,7 +192,7 @@ IP\_ADDR:HEX\_PUBLIC\_KEY \newline
 IP\_ADDR:HEX\_PUBLIC\_KEY
 }
 
-On boot, the Nihilo runtime registers known machines to this service, and queries it for those belonging to other devices.
+On boot, the Nihilo runtime registers owned machines to this service, and queries it for those belonging to other devices. If the runtime decodes a packet from an unknown machine, it will add that to the list.
 
 \subsubsection{Adding a simple heap to wasm3}
 
@@ -213,9 +206,138 @@ It was decided, as a consequence of the small memory footprint of each function,
 
 \subsubsection{Task queue}
 
-\subsubsection{Example communication}
+One problem encountered early on in the development of Nihilo was the limited RAM of the ESP-32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP-32, requiring these would break compatibility with most off-the-shelf ESP-32 modules.
 
-\subsubsection{Nihilo WASM API}
+The solution is to use a FIFO (first in, first out) task queue. This allows wasm function calls to be placed onto the queue as tasks and executed one by one. These tasks may optionally also specify callbacks, placing new tasks onto the queue once execution is complete. Two machines can have an asynchronous 'dialogue' through callbacks without ever loading more than one of them at a time. This model can also be extened to communication if the queue also contains calls to machines on other devices, in which the execution is replaced with encrypting and sending the call.
+
+Tasks are encapsulated within the \texttt{task} struct, containing;
+\begin{itemize}
+\item Origin public key
+\item Destination public key
+\item A retry count
+\item A pointer to the return value
+\item The name of the target function
+\item The name of the function to call on success
+\item The name of the function to call on failure
+\item The parameter to be passed to the function (a null terminated string, immediately following the struct in memory)
+\end{itemize}
+
+Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
+
+
+\subsubsection{Communication and packet structure}
+
+
+
+\subsubsection{Nihilo API Macros}
+
+\textbf{\texttt{NIH\_VOID(NAME, PARAMNAME)}}\newline
+Create a new Nihilo-exposed function with name \texttt{NAME}, and a \texttt{const char*} parameter called \texttt{PARAMNAME}. Replaces the normal function declaration. If it is called with no parameter, \texttt{PARAMNAME} will equal \texttt{nullptr}.
+
+\begin{verbatim}
+NIH_VOID(entry, param){
+  logStr("hello, world!);
+}
+\end{verbatim}
+
+\textbf{\texttt{NIH\_CHARS(NAME, PARAMNAME)}}\newline
+Same as \texttt{NIH\_VOID(NAME, PARAMNAME)}, but returns a \texttt{const char *}.
+
+\begin{verbatim}
+NIH_CHARS(entry, param){
+  return "hello, world.";
+}
+\end{verbatim}
+
+\textbf{\texttt{WASM\_IMPORT(MODULE,NAME)}}\newline
+Internal macro, assisting with exposing functions to the user.
+
+\subsubsection{Nihilo API Functions}
+
+\textbf{\texttt{void mallocWasm(void** target, uint32\_t size)}}\newline
+Replacement for malloc(). Pointer pointed to by \texttt{target} is is set to point to a new buffer of length \texttt{size} bytes. Allocates heap inside of wasm3's memory space.
+
+\begin{verbatim}
+NIH_VOID(entry, param){
+  char* buf;
+  mallocWasm((void**)&buf, 50);
+  strcpy(buf, "test");
+  logStr(buf);
+}
+\end{verbatim}
+
+\textbf{\texttt{void writeString(const char* path, const char* value)}}\newline
+Saves \texttt{value} in \texttt{path} in the current machine's JSON. Only objects and strings are currently supported to save, and only strings to directly edit, deliniated by full stops(\texttt{.}). If the write is under an object that doesn't yet exist, it will create that object.
+
+\begin{verbatim}
+NIH_VOID(save_value, param){
+  writeString("A.B.C.Str", param);
+}
+\end{verbatim}
+
+\textbf{\texttt{void readString(const char* path, char** target)}}\newline
+Looks up \texttt{path} in the current machine's JSON. Pointer pointed to by \texttt{target} is set to point to the value read out of JSON.
+
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  char* val;
+  readString("A.B.C.Str", &val);
+  if(val != nullptr)
+    logStr(val);
+}
+\end{verbatim}
+
+\textbf{\texttt{int knownPubs(unsigned char** IdsOut, int include\_local, int include\_non\_local)}}\newline
+Lists machines currently known to this device. if \texttt{include\_local} is set to 0, machines on the device will be excluded from the list. Similarly, if \texttt{include\_non\_local} is set to 0, machines not on the device will be excluded. \texttt{IdsOut} is set to point to a list of the 32-byte public keys of the requested devices, and the function returns the number of machines which have been included in \texttt{IdsOut}.
+
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  unsigned char* ids;
+  int known = knownPubs(&ids, 0, 1);
+  if(known > 0)
+    logStr("Devices knows of non-local machines");
+}
+\end{verbatim}
+
+\textbf{\texttt{void logStr(const char* tolog)}}\newline
+Log a string to the user, using the ESP-IDF monitoring program.
+
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  logStr("hello, world");
+}
+\end{verbatim}
+
+\textbf{\texttt{void queue(const unsigned char* target\_pub, const char* fname, const char* param, const char* onsuccess, const char* onfail)}}\newline
+Add a new task to the back of the queue, to be executed after every other task currently on the queue. The task will be sent to \texttt{target\_pub}, either directly if it is on this device, or through an encrypted socket if it is on another. The target device will execute \texttt{fname(param)}, and pass its result to \texttt{onsuccess} in this machine if it is a success, or \texttt{onfail if not}. \texttt{param}, \texttt{onsuccess} and \texttt{onfail} may be set to \texttt{nullptr}, but \texttt{fname} must be a valid string.
+
+\begin{verbatim}
+NIH_VOID(entry, param){
+  unsigned char* ids;
+  int known = knownPubs(&ids, 1, 0);
+  if(known > 0)
+    queue(ids, "test", "hello, world!", "success", nullptr);
+}
+NIH_CHARS(test, param){
+  logStr(param);
+  return "response";
+}
+NIH_VOID(success, param){
+	logStr(param);
+}
+\end{verbatim}
+This example prints;
+\begin{verbatim}
+hello, world!
+response
+\end{verbatim}
+\textbf{\texttt{void setReturn (const char* ret)}}\newline
+Internal function, assisting with returning data to the runtime.
+
+\textbf{\texttt{void getParam(char** param)}}\newline
+Internal function, assisting with passing the parameter from the runtime to WASM code.
+
+
 
 
 \section{Results}
