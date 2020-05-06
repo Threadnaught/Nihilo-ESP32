@@ -19,7 +19,7 @@ Microcontrollers, on the other hand, tend to be realtime, with primitive network
 
 As moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
 Because waiting for cheaper hardware is no longer a valid \lq optimization' stratergy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
-Although they are traditionally classified as microcontrollers, they blur the line between the microcontrollers and microprocessors.
+Although these new devices are traditionally classified as microcontrollers, theese new capabilities blur the line between the microcontrollers and microprocessors.
 The \lq super-mircocontroller' used in this project was the Espressif systems ESP-32.
 
 The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution, IO and communication in a simple to use and extensible platform.
@@ -124,9 +124,9 @@ For security purposes, machines are sandboxed from eachother, but have absolute 
 \item The message can be read only by the stated destination.
 \end{itemize}
 
-RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this job. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of it's keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
+RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of it's keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
 
-ECDH \cite{ecc} (Elliptic Curve Diffie-Hellman) is a more recent invention than RSA, but it is far more computationally efficent. It has a number of advantages over RSA;
+ECC \cite{ecc}(Elliptic Curve Cryptography) is a set of cryptographic primitives based on modular elliptic curves. ECC was built into an asymmetric cryptosystem called ECDH (Elliptic Curve Diffie-Hellman), which is far more computationally efficent than RSA. It has a number of advantages over RSA;
 \begin{itemize}
 \item Keygen is finished in 200ms, a 100 times speedup.
 \item ECDH is not an encryption algorithm, but a key agreement protocol where all of the necassary information is already embedded in the public key of the peer. Both RSA and ECDH need a symmetric encryption algorithm for the bulk exchange of data, but RSA requires a dedicated protocol to send the encrypted symmetric key from one peer to the other while ECDH does not.
@@ -137,6 +137,14 @@ ECDH \cite{ecc} (Elliptic Curve Diffie-Hellman) is a more recent invention than 
 The sum of these advantages is a massively streamlined communication process compared to one implemented using RSA. The 200ms keygen means that machines can be created much faster, while the implicit signature and key exchange negate the need of an SSL-style intermediate layer.
 
 Because the cryptographic verification requires holding the keypair, ownership of the keypair is for all intents and purposes ownership of the machine. The security model breaks down if multiple devices hold the same keypair, so transferring private keys between devices or exposing them to WASM code is \textbf{explicitly forbidden}.
+
+There are two desired capabilities of any asymmetric encryption scheme; security and authentication. Security is the knowledge that only the recipient of the message can decode it. Authentication is the knowledge that the recipient is who they say they are. The ECDH algorithm used by the Nihilo runtime implicitly provides security, but not authentication, which would require one of;
+
+\begin{itemize}
+\item A dedicated Public Key Infrastructure (PKI), built on ECC, allowing any claims of identity to be traced back to a common trusted third party.
+\item An integration into an existing PKI, such as SSL.
+\item A hybrid approach, where trust is rooted in SSL but becomes transferred to Nihilo at some point down the chain to the device attempting to authenticate.
+\end{itemize}
 
 Once ECDH has been run, transforming a keypair of one machine and a public key of the other into a shared secret, the message must be symmetrically encrypted. The algorithm chosen was AES\cite{aes}, an efficent block cipher. AES works one block at a time, applying encryption to 16 bytes, then moving on to the next 16 bytes. The original implementation of AES, called ECB mode, had a flaw where identical blocks were encrypted as identical ciphertext, exposing ECB encryption to a variety of attacks, which were rectified with CBC mode. This mode uses the previous block to help encrypt the next, so requires an initialization vector to randomise the first block.
 
@@ -227,7 +235,7 @@ Because the last four are encrypted for any transmmission, they are contained wi
 
 \subsubsection{Communication and packet structure}
 
-
+Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because, unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. Responses to messages are not implemented at the protocol layer because they exist at the function layer. It is asynchronous because it cannot wait for replies to messages, rather invokes new actions once the replies are received.
 
 \subsubsection{Nihilo API Macros}
 
