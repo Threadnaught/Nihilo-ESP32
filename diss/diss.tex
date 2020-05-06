@@ -214,7 +214,7 @@ In order to maintain the integrity of the sandbox, accessing memory outside of t
 It was decided, as a consequence of the small memory footprint of each function, and the limitations to where memory can be allocated, to reserve page offsets 0x0000 to 0x7FFF (32768 bytes) for the stack, and to reserve offsets 0x8000 to 0xFFFF (32767 bytes) for a heap. Because these pages are cleaned up after a short time, no mechanism for freeing memory was created. A \texttt{uint16\_t} at page offset 0x8000 tracks the amount of allocated heap, and is incremented every time more is allocated. Breaking the Nihilo coding model, and creating highly recursive functions, or functions which allocated and freed a lot of memory, would in turn break this memory allocation scheme.
 
 
-\subsubsection{Task queue}
+\subsubsection{Task queue and communication}
 
 One problem encountered early on in the development of Nihilo was the limited RAM of the ESP-32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP-32, requiring these would break compatibility with most off-the-shelf ESP-32 modules.
 
@@ -234,10 +234,9 @@ Tasks are encapsulated within the \texttt{task} struct, containing;
 
 Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
 
+As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because, unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. Responses to messages are not implemented at the protocol layer because they exist at the function layer. It is asynchronous because it cannot wait for replies to messages, rather invokes new actions once the replies are received.
 
-\subsubsection{Communication and packet structure}
 
-Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because, unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. Responses to messages are not implemented at the protocol layer because they exist at the function layer. It is asynchronous because it cannot wait for replies to messages, rather invokes new actions once the replies are received.
 
 \subsubsection{Nihilo API Macros}
 
