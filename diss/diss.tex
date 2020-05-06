@@ -319,21 +319,18 @@ NIH_VOID(log_value, param){
 \end{verbatim}
 
 \textbf{\texttt{void queue(const unsigned char* target\_pub, const char* fname, const char* param, const char* onsuccess, const char* onfail)}}\newline
-Add a new task to the back of the queue, to be executed after every other task currently on the queue. The task will be sent to \texttt{target\_pub}, either directly if it is on this device, or through an encrypted socket if it is on another. The target device will execute \texttt{fname(param)}, and pass its result to \texttt{onsuccess} in this machine if it is a success, or \texttt{onfail if not}. \texttt{param}, \texttt{onsuccess} and \texttt{onfail} may be set to \texttt{nullptr}, but \texttt{fname} must be a valid string.
+Add a new task to the back of the queue, to be executed after every other task currently on the queue. The task will be sent to \texttt{target\_pub}, either directly if it is on this device, or through an encrypted socket if it is on another. If \texttt{target\_pub} is nullptr, it will be sent to the current machine. The target device will execute \texttt{fname(param)}, and pass its result to \texttt{onsuccess} in this machine if it is a success, or \texttt{onfail if not}. \texttt{param}, \texttt{onsuccess} and \texttt{onfail} may be set to \texttt{nullptr}, but \texttt{fname} must be a valid string.
 
 \begin{verbatim}
 NIH_VOID(entry, param){
-  unsigned char* ids;
-  int known = knownPubs(&ids, 1, 0);
-  if(known > 0)
-    queue(ids, "test", "hello, world!", "success", nullptr);
+  queue(nullptr, "test", "hello, world!", "success", nullptr);
 }
 NIH_CHARS(test, param){
   logStr(param);
   return "response";
 }
 NIH_VOID(success, param){
-	logStr(param);
+  logStr(param);
 }
 \end{verbatim}
 This example prints;
