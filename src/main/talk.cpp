@@ -39,7 +39,7 @@ void serve(){
 	int listener_no = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	if(listener_no < 0) 
 		throw std::runtime_error("could not create socket");
-	ESP_LOGI(nih, "Created socket");
+	//ESP_LOGI(nih, "Created socket");
 	//allow socket reuse:
 	int reuse = 1;
 	if(setsockopt(listener_no, SOL_SOCKET, SO_REUSEADDR, (void*) &reuse, sizeof(int)) < 0)
@@ -51,15 +51,15 @@ void serve(){
 	addr.sin_addr.s_addr = INADDR_ANY;
 	if(bind(listener_no, (sockaddr*)&addr, sizeof(sockaddr_in)) < 0)
 		throw std::runtime_error("could not bind socket");
-	ESP_LOGI(nih, "Bound socket");
+	//ESP_LOGI(nih, "Bound socket");
 	listen(listener_no,1);
-	ESP_LOGI(nih, "Listening");
+	//ESP_LOGI(nih, "Listening");
 	sockaddr_in other_addr;
 	socklen_t other_len = sizeof(sockaddr_in);
 	int connection_no = accept(listener_no, (sockaddr*) &other_addr, &other_len);
 	if(connection_no < 0)
 		throw std::runtime_error("could not accept connection");
-	ESP_LOGI(nih, "Connected");
+	//ESP_LOGI(nih, "Connected");
 	//receive packet:
 	packet_header received_header;
 	read(connection_no, &received_header, sizeof(packet_header));
@@ -70,12 +70,10 @@ void serve(){
 			dest = i;
 			break;
 		}
-	if(dest != -1){//if destination has been found, receive the rest of the packet. 
+	if(dest != -1 && received_header.contents_length < 2000){//if destination has been found, receive the rest of the packet. 
 		int to_receive = calc_true_packet_size(received_header.contents_length);
 		unsigned char* encrypted_body = (unsigned char*)malloc(to_receive);
-		ESP_LOGI(nih, "receiving");
 		int n = read(connection_no, encrypted_body, to_receive);
-		ESP_LOGI(nih, "read");
 		unsigned char secret[shared_secret_len];
 		machines.peek(dest).derive_shared(received_header.origin_pub, secret);
 		if(n == to_receive){//if the correct number of bytes have been read, decrypt packet
@@ -83,10 +81,7 @@ void serve(){
 			decrypt(secret, encrypted_body, to_receive-aes_block_size, unencrypted_body);
 			if(unencrypted_body[calc_true_packet_size(received_header.contents_length)-aes_block_size-1] == 0){ //prevent buffer overflow
 				unsigned char* IDTgt = unencrypted_body;
-				char* funcname = (char*)unencrypted_body + ID_len;
-				char* onsuccess = (char*)unencrypted_body + ID_len + max_func_len;
-				char* onfailure = (char*)unencrypted_body + ID_len + (max_func_len * 2);
-				char* param = (char*)unencrypted_body + ID_len + (max_func_len * 3);
+				wire_task* w_task = (wire_task*)(unencrypted_body + ID_len);
 				if(memcmp(IDTgt, machines.peek(dest).ID, ID_len) == 0){//ensure that this packet is valid
 					sockaddr_in origin_addr;
 					socklen_t len = sizeof(origin_addr);
@@ -113,17 +108,14 @@ void serve(){
 						ESP_LOGI(nih, "Adding machine with descriptor %s", descrip);
 						machines.add(Machine(descrip));
 					}
-					//ESP_LOGI(nih, "received %s(%s), %s, %s", funcname, param, onsuccess, onfailure);
 					//catch nullptrs and fuckups:
-					if(strlen(funcname) == 0 || strlen(funcname) >= max_func_len) 
-						funcname = nullptr;
-					if(strlen(onsuccess) == 0 || strlen(onsuccess) >= max_func_len) 
-						onsuccess = nullptr;
-					if(strlen(onfailure) == 0 || strlen(onfailure) >= max_func_len) 
-						onfailure = nullptr;
-					if(strlen(param) == 0) 
-						param = nullptr;
-					queue_copy(received_header.origin_pub, received_header.dest_pub, funcname, param, onsuccess, onfailure);
+					if(strlen(w_task->function_name) == 0 || strlen(w_task->function_name) >= max_func_len) 
+						memset(w_task->function_name, 0, max_func_len);
+					if(strlen(w_task->on_success) == 0 || strlen(w_task->on_success) >= max_func_len) 
+						memset(w_task->on_success, 0, max_func_len);
+					if(strlen(w_task->on_failure) == 0 || strlen(w_task->on_failure) >= max_func_len) 
+						memset(w_task->on_failure, 0, max_func_len);
+					queue_copy(received_header.origin_pub, received_header.dest_pub, w_task->function_name, (char*)(w_task+1), w_task->on_success, w_task->on_failure);
 				}
 				else
 					ESP_LOGE(nih, "Target ID does not match target pub");
@@ -137,13 +129,13 @@ void serve(){
 		delete encrypted_body;
 	}
 	else
-		ESP_LOGI(nih, "can't find dest");
+		ESP_LOGE(nih, "can't find dest or packet too long");
 	shutdown(connection_no, SHUT_RDWR);
 	close(connection_no);
 	//stop listening for new connections:
 	shutdown(listener_no, SHUT_RDWR);
 	close(listener_no);
-	ESP_LOGI(nih, "Closed");
+	//ESP_LOGI(nih, "Closed");
 }
 //send call request to another device
 void send_call(Machine origin, Machine target, const char* funcname, const char* param, const char* onsuccess, const char* onfailure){
@@ -166,12 +158,6 @@ void send_call(Machine origin, Machine target, const char* funcname, const char*
 		strncpy((char*)(unencrypted_body + ID_len + (max_func_len * 2)), onfailure, max_func_len-1);
 	if(param != nullptr)
 		strcpy((char*)(unencrypted_body + ID_len + (max_func_len * 3)), param);
-
-
-	char blap[1000];
-	bytes_to_hex(unencrypted_body, calc_true_packet_size(pheader.contents_length)-aes_block_size, blap);
-	ESP_LOGI(nih, "hex:%s", blap);
-
 	//create socket:
 	int connection_no = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 	if(connection_no < 0) 

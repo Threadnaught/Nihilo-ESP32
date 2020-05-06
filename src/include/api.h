@@ -8,13 +8,14 @@
 #define WASM_IMPORT(MODULE,NAME)		__attribute__((import_module(MODULE))) __attribute__((import_name(NAME)))
 
 extern "C" {
-	WASM_IMPORT("nih", "setReturn") void setReturn (char* ret);
+	WASM_IMPORT("nih", "setReturn") void setReturn (const char* ret);
 	WASM_IMPORT("nih", "getParam") void getParam(char** param);
 	WASM_IMPORT("nih", "mallocWasm") void mallocWasm(void** target, uint32_t size);
 	WASM_IMPORT("nih", "writeString") void writeString(const char* path, const char* value);
 	WASM_IMPORT("nih", "readString") void readString(const char* path, char** target);
 	WASM_IMPORT("nih", "knownIds") int knownIds(unsigned char** IdsOut, int include_local, int include_non_local);
 	WASM_IMPORT("nih", "log") void logStr(const char* tolog);
+	WASM_IMPORT("nih", "queue") void queue(const unsigned char* target_pub, const char* fname, const char* param, const char* onsuccess, const char* onfail);
 }
 
 #define NIH_VOID(NAME, PARAMNAME) \
@@ -24,10 +25,10 @@ extern "C" {
 	void NAME(char* PARAMNAME) /*allow developer to implement their own function*/
 
 #define NIH_CHARS(NAME, PARAMNAME) \
-	char* NAME(char* PARAMNAME); /*declare function so wrapper can use it*/\
+	const char* NAME(char* PARAMNAME); /*declare function so wrapper can use it*/\
 	extern "C" __attribute__((used)) __attribute__((visibility ("default"))) \
 	void wrapper_##NAME(){char* param; getParam(&param); setReturn(NAME(param)); } /*make wrapper around function which handles param and return */\
-	char* NAME(char* PARAMNAME) /*allow developer to implement their own function*/
+	const char* NAME(char* PARAMNAME) /*allow developer to implement their own function*/
 
 //int to string:
 char* decstr(int input){

@@ -7,13 +7,15 @@
 
 #define heap_offset 0x8000//how far is heap from stack
 
-locker<list<key_value_pair<IM3Runtime, char*>>*> all_params(new list<key_value_pair<IM3Runtime, char*>>());
-locker<list<key_value_pair<IM3Runtime, char*>>*> all_rets(new list<key_value_pair<IM3Runtime, char*>>());
-locker<list<key_value_pair<IM3Runtime, char*>>*> all_ids(new list<key_value_pair<IM3Runtime, char*>>());
+//locker<list<key_value_pair<IM3Runtime, char*>>*> all_params(new list<key_value_pair<IM3Runtime, char*>>());
+//locker<list<key_value_pair<IM3Runtime, char*>>*> all_rets(new list<key_value_pair<IM3Runtime, char*>>());
+//locker<list<key_value_pair<IM3Runtime, char*>>*> all_ids(new list<key_value_pair<IM3Runtime, char*>>());
 
-locker<list<char**>*> task_queue(new list<char**>());
+//locker<list<char**>*> task_queue(new list<char**>());
+locker<list<task*>*> task_queue(new list<task*>());
+locker<list<key_value_pair<IM3Runtime, task*>>*> cur_tasks(new list<key_value_pair<IM3Runtime, task*>>());
 
-char* popPair(list<key_value_pair<IM3Runtime, char*>>* list, IM3Runtime target){
+task* popTask(list<key_value_pair<IM3Runtime, task*>>* list, IM3Runtime target){
 	for(int i = 0; i < list->count(); i++){
 		auto kvp = list->peek(i);
 		if (kvp.key == target){
@@ -23,6 +25,12 @@ char* popPair(list<key_value_pair<IM3Runtime, char*>>* list, IM3Runtime target){
 	}
 	return nullptr;
 }
+task* getTask(list<key_value_pair<IM3Runtime, task*>>* list, IM3Runtime target){
+	task* ret = popTask(list, target);
+	list->add(key_value_pair<IM3Runtime, task*>(target, ret));
+	return ret;
+}
+
 void* malloc_runtime(size_t size, IM3Runtime r){//pray to god no one uses over 0x8000 stack address
 	char* heap_origin = ((char*)(r->memory.mallocated + 1))+heap_offset;
 	uint16_t* already_allocated = (uint16_t*)heap_origin;
@@ -37,16 +45,13 @@ void free_runtime(){
 m3ApiRawFunction(nih_get_param)
 {
 	m3ApiGetArg(u32, param)
-	list<key_value_pair<IM3Runtime, char*>>* params = *all_params.acquire();
-	char* cur_pair = popPair(params, runtime);
-	all_params.release();
+	list<key_value_pair<IM3Runtime, task*>>* params = *cur_tasks.acquire();
+	task* cur_task = getTask(params, runtime);
+	cur_tasks.release();
+	char* cur_param = (char*)(cur_task+1);
 	u32* y = (u32*)m3ApiOffsetToPtr(param);//offset to x
-	if(cur_pair == nullptr){//set to nullptr if no param
-		*y = 0;
-		m3ApiSuccess();
-	}
-	char* target = (char*)malloc_runtime(strlen(cur_pair)+1, runtime);
-	strcpy(target, cur_pair);
+	char* target = (char*)malloc_runtime(strlen(cur_param)+1, runtime);
+	strcpy(target, cur_param);
 	*y = m3ApiPtrToOffset(target);
 	m3ApiSuccess();
 }
@@ -60,10 +65,12 @@ m3ApiRawFunction(nih_return)
 	size_t len = strnlen(src, 999); //truncates return value at 1000 chars
 	char* dest = (char*)malloc(len+1);
 	memcpy(dest, src, len+1);
-	list<key_value_pair<IM3Runtime, char*>>* r = *all_rets.acquire();
-	popPair(r, runtime);//pop if runtime already has returned (cheeky)
-	r->add(key_value_pair<IM3Runtime, char*>(runtime, dest));
-	all_rets.release();
+	list<key_value_pair<IM3Runtime, task*>>* tasks = *cur_tasks.acquire();
+	task* t = getTask(tasks, runtime);//pop if runtime already has returned (cheeky)
+	if(t->ret != nullptr)
+		delete t->ret;
+	t->ret = dest;
+	cur_tasks.release();
 	m3ApiSuccess();
 }
 m3ApiRawFunction(nih_malloc)//allocate to my heap
@@ -76,12 +83,11 @@ m3ApiRawFunction(nih_malloc)//allocate to my heap
 	m3ApiSuccess();
 }
 void id_to_fname(char* fname, IM3Runtime runtime){
-	list<key_value_pair<IM3Runtime, char*>>* ids = *all_ids.acquire();
-	char* id = popPair(ids, runtime);
-	ids->add(key_value_pair<IM3Runtime, char*>(runtime, id));
-	all_ids.release();
+	list<key_value_pair<IM3Runtime, task*>>* tasks = *cur_tasks.acquire();
+	task* task = getTask(tasks, runtime);
+	cur_tasks.release();
 	fname[0] = '/';
-	bytes_to_hex((unsigned char*)id, ID_len, fname+1);
+	bytes_to_hex(task->dest_pub, ID_len, fname+1);
 	strcpy(fname+strlen(fname), ".json");
 }
 m3ApiRawFunction(nih_write_string)//passed path and value
@@ -180,27 +186,36 @@ m3ApiRawFunction(nih_log)
 	ESP_LOGI(nih, "%s", (char*)m3ApiOffsetToPtr(tolog));
 	m3ApiSuccess();
 }
+m3ApiRawFunction(nih_queue)//void queue(const unsigned char* target_pub, const char* fname, const char* param, const char* onsuccess, const char* onfail);
+{
+	/*m3ApiGetArg(u32, target_pub_offset);
+	m3ApiGetArg(u32, fname_offset);
+	m3ApiGetArg(u32, param_offset);
+	m3ApiGetArg(u32, onsuccess_offset);
+	m3ApiGetArg(u32, onfail_offset);
+	const unsigned char* target_pub = (unsigned char*)m3ApiOffsetToPtr(target_pub_offset);
+	const char* fname = (char*)m3ApiOffsetToPtr(fname_offset);
+	const char* param = (char*)m3ApiOffsetToPtr(param_offset);
+	const char* onsuccess = (char*)m3ApiOffsetToPtr(onsuccess_offset);
+	const char* onfail = (char*)m3ApiOffsetToPtr(onfail_offset);*/
+	m3ApiSuccess();
+}
 #define checkerr(result, stage) if(result) {\
-	popPair(*all_params.acquire(), runtime); all_params.release();\
-	popPair(*all_rets.acquire(), runtime); all_rets.release();\
-	popPair(*all_ids.acquire(), runtime); all_ids.release();\
+	popTask(*cur_tasks.acquire(), runtime); cur_tasks.release();\
 	m3_FreeRuntime(runtime); \
 	m3_FreeEnvironment(env); \
 	ESP_LOGE(nih, "error at %s", stage);\
 	throw std::runtime_error(result);\
 }
 //calling function has responsibility for cleaning up both parameter and return value!!!
-char* run_wasm(char* name, char* param, unsigned char* ID)
+char* run_wasm(task* t, unsigned char* ID)
 {
 	IM3Environment env = m3_NewEnvironment ();
 	IM3Runtime runtime = m3_NewRuntime (env, 5*1024, nullptr);
 
-	list<key_value_pair<IM3Runtime, char*>>* params = *all_params.acquire();
-	params->add(key_value_pair<IM3Runtime, char*>(runtime, param));
-	all_params.release();
-	list<key_value_pair<IM3Runtime, char*>>* ids = *all_ids.acquire();
-	ids->add(key_value_pair<IM3Runtime, char*>(runtime, (char*)ID));
-	all_ids.release();
+	list<key_value_pair<IM3Runtime, task*>>* tasks = *cur_tasks.acquire();
+	tasks->add(key_value_pair<IM3Runtime, task*>(runtime, t));
+	cur_tasks.release();
 
 	unsigned char* wasm;
 	int wasm_length = load_wasm(ID, &wasm);
@@ -221,84 +236,71 @@ char* run_wasm(char* name, char* param, unsigned char* ID)
 	IM3Function func;
 	char fullname[120];
 	strcpy(fullname, "wrapper_");
-	strcpy(fullname + strlen(fullname), name);
+	strcpy(fullname + strlen(fullname), t->t.function_name);
 	result = m3_FindFunction (&func, runtime, fullname);
 	checkerr(result, "find");
 	const char* char_args[] = { nullptr };
 	result = m3_CallWithArgs (func, 0, char_args);
 	checkerr(result, "call");
 	//cleanup/return:
-	list<key_value_pair<IM3Runtime, char*>>* rets = *all_rets.acquire();
-	char* ret = popPair(rets, runtime);
-	all_rets.release();
-	ids = *all_ids.acquire();
-	popPair(ids, runtime);
-	all_ids.release();
+	tasks = *cur_tasks.acquire();
+	char* ret = popTask(tasks, runtime)->ret;
+	cur_tasks.release();
 	m3_FreeRuntime(runtime);
 	m3_FreeEnvironment(env);
 	return ret;
 }
 
 //queue takes ownership of passed variables
-void queue_task(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure){
-	list<char**>* tasks = *task_queue.acquire();
-	char** this_task = (char**)calloc(6, sizeof(char*));
-	this_task[0] = (char*)origin_pub;
-	this_task[1] = (char*)dest_pub;
-	this_task[2] = funcname;
-	this_task[3] = param;
-	this_task[4] = onsuccess;
-	this_task[5] = onfailure;
-	tasks->add(this_task);
+void queue_task(task* t){
+	list<task*>* tasks = *task_queue.acquire();
+	tasks->add(t);
 	task_queue.release();
 }
+void queue_copy(const unsigned char* origin_pub, const unsigned char* dest_pub, const char* funcname, const char* param, const char* onsuccess, const char* onfailure){
+	task inited_task;//to get init vars
+	task* t = (task*)malloc(sizeof(task) + (param==nullptr?0:strlen(param)) + 1);
+	memcpy(t, &inited_task, sizeof(task));
+	memcpy(t->origin_pub, origin_pub, ecc_pub_len);
+	memcpy(t->dest_pub, dest_pub, ecc_pub_len);
+	strncpy(t->t.function_name, funcname, max_func_len-1);
+	memset(t->t.on_success, 0, max_func_len);
+	memset(t->t.on_failure, 0, max_func_len);
+	memset((char*)(t+1), 0, 1);
+	if(onsuccess != nullptr)
+		strncpy(t->t.on_success, onsuccess, max_func_len-1);
+	if(onfailure != nullptr)
+		strncpy(t->t.on_failure, onfailure, max_func_len-1);
+	if(param != nullptr)
+		strcpy((char*)(t+1), param);
+	queue_task(t);
+}
 
-unsigned char* copy_pub(unsigned char* pub){
-	if(pub == nullptr) return nullptr;
-	unsigned char* newpub = (unsigned char*)malloc(ecc_pub_len);
-	memcpy(newpub, pub, ecc_pub_len);
-	return newpub;
-}
-char* copy_string(char* str){
-	if(str == nullptr) return nullptr;
-	int len = strlen(str)+1;
-	char* newstr  = (char*)malloc(len);
-	memcpy(newstr, str, len);
-	return newstr;
-}
-void queue_copy(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure){
-	origin_pub = copy_pub(origin_pub);
-	dest_pub = copy_pub(dest_pub);
-	funcname = copy_string(funcname);
-	param = copy_string(param);
-	onsuccess = copy_string(onsuccess);
-	onfailure = copy_string(onfailure);
-	queue_task(origin_pub, dest_pub, funcname, param, onsuccess, onfailure);
-}
-void exec(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure){
+void exec(task* t){
+	//ESP_LOGI(nih, "execing %s(%s), %s, %s", t->t.function_name, (char*)(t+1), t->t.on_success, t->t.on_failure);
 	for(int i = 0; i < machines.count(); i++){
 		Machine m = machines.peek(i);
-		if(memcmp(dest_pub, m.ecc_pub, ecc_pub_len) == 0){
+		if(memcmp(t->dest_pub, m.ecc_pub, ecc_pub_len) == 0){
 			if(m.local){
 				try{
-					char* response = run_wasm(funcname, param, m.ID);
-					if(onsuccess != nullptr)
-						queue_copy(dest_pub, origin_pub, onsuccess, response, nullptr, nullptr);
+					char* response = run_wasm(t, m.ID);
+					if(strlen(t->t.on_success) > 0)
+						queue_copy(t->dest_pub, t->origin_pub, t->t.on_success, response, nullptr, nullptr);
 					if(response != nullptr) 
 						delete response;
 				}
 				catch (const std::exception& e) {
-					ESP_LOGE(nih, "execution exception in function %s: %s", funcname, e.what());
-					if(onfailure != nullptr)
-						queue_copy(dest_pub, origin_pub, onfailure, "execution exception", nullptr, nullptr);
+					ESP_LOGE(nih, "execution exception in function %s: %s", t->t.function_name, e.what());
+					if(strlen(t->t.on_failure) > 0)
+						queue_copy(t->dest_pub, t->origin_pub, t->t.on_failure, "execution exception", nullptr, nullptr);
 				}
 				return;
 			}
 			else{
 				for(int j = 0; j < machines.count(); j++){
 					Machine origin = machines.peek(j);
-					if(memcmp(origin_pub, origin.ecc_pub, ecc_pub_len) == 0){
-						send_call(origin, m, funcname, param, onsuccess, onfailure);
+					if(memcmp(t->origin_pub, origin.ecc_pub, ecc_pub_len) == 0){
+						send_call(origin, m, t->t.function_name, (char*)(t+1), t->t.on_success, t->t.on_failure);
 						return;
 					}
 				}
@@ -312,17 +314,15 @@ void exec(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, ch
 
 void empty_queue(){
 	//acquire the queue:
-	list<char**>* tasks = *task_queue.acquire();
+	list<task*>* tasks = *task_queue.acquire();
 	while(tasks->count() > 0){
 		//remove 0th queue item:
-		char** this_task = tasks->pop(0);
+		task* this_task = tasks->pop(0);
 		//release the queue so other threads (or this thread) can use it
 		task_queue.release();
-		exec((unsigned char*)this_task[0], (unsigned char*)this_task[1], this_task[2], this_task[3], this_task[4], this_task[5]);
+		//exec((unsigned char*)this_task[0], (unsigned char*)this_task[1], this_task[2], this_task[3], this_task[4], this_task[5]);
+		exec(this_task);
 		//tidy up memory:
-		for(int i = 0; i < 6; i++)
-			if(this_task[i] != nullptr)
-				delete this_task[i];
 		delete this_task;
 		//acquire for the next iteration:
 		tasks = *task_queue.acquire();

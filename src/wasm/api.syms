@@ -5,3 +5,4 @@ writeString
 readString
 knownIds
 logStr
+queue

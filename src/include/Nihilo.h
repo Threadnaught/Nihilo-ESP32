@@ -37,6 +37,20 @@ struct packet_header{
 	uint16_t contents_length; //packet true length = (roundup(contents_length/aes_block_size)+1)*aes_block_size
 };
 
+//both types of task are followed by the param (of variable length)
+
+struct wire_task{ //task on the wire
+	char function_name[max_func_len];
+	char on_success[max_func_len];
+	char on_failure[max_func_len];
+};
+struct task{//task (full)
+	unsigned char origin_pub[ecc_pub_len];
+	unsigned char dest_pub[ecc_pub_len];
+	int retry_count = 3;
+	char* ret = nullptr;
+	wire_task t;
+};
 template<typename T> struct list_elem{
 	T elem;
 	list_elem<T>* next = nullptr;
@@ -197,7 +211,7 @@ struct Machine{
 
 extern list<Machine> machines;
 
-char* run_wasm(char* name, char* param, unsigned char* ID);
+char* run_wasm(task* t, unsigned char* ID);
 void init_flash();
 void init_wifi();
 ip_event_got_ip_t connect_wifi(const char* ssid, const char* psk);
@@ -209,6 +223,5 @@ void encrypt(unsigned char* secret, unsigned char* to_encrypt, int to_encrypt_le
 void decrypt(unsigned char* secret, unsigned char* to_decrypt, int to_decrypt_len, unsigned char* decrypted_buf);
 void serve();
 void send_call(Machine origin, Machine target, const char* funcname, const char* param, const char* onsuccess, const char* onfailure);
-void queue_task(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure);
-void queue_copy(unsigned char* origin_pub, unsigned char* dest_pub, char* funcname, char* param, char* onsuccess, char* onfailure);
+void queue_copy(const unsigned char* origin_pub, const unsigned char* dest_pub, const char* funcname, const char* param, const char* onsuccess, const char* onfailure);
 void empty_queue();
