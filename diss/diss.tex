@@ -6,6 +6,8 @@
 \usepackage{mathtools}
 \usepackage{xcolor}
 \usepackage{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{positioning}
 
 \begin{document}
 \section{Abstract}
@@ -191,18 +193,7 @@ There are two major peices of tooling that were required to implement Nihilo;
 
 Allowing for a simple connection to private resources is a common problem in developing open-source software. WiFi credentials, API keys and bitcoin addresses are often left in code which is pushed into public repositories. In order to develop without adding support for Eduroam, and exposing university login details in the code, create\_ap \cite{createap}  was used. This turns WiFi-enabled linux computers into repeaters, taking in one WiFi network while creating another with dependable, specified parameters that can be developed against.
 
-The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. To simplify handling, the server will only send back machines belonging to other devices. The POST requests take the form;
-
-\texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}
-
-Responses take the form;
-
-\texttt{4 \newline
-IP\_ADDR:HEX\_PUBLIC\_KEY \newline
-IP\_ADDR:HEX\_PUBLIC\_KEY \newline
-IP\_ADDR:HEX\_PUBLIC\_KEY \newline
-IP\_ADDR:HEX\_PUBLIC\_KEY
-}
+The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. To simplify handling, the server will only send back machines belonging to other devices. 
 
 On boot, the Nihilo runtime registers owned machines to this service, and queries it for those belonging to other devices. If the runtime decodes a packet from an unknown machine, it will add that to the list.
 
@@ -237,6 +228,8 @@ Tasks are encapsulated within the \texttt{task} struct, containing;
 Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
 
 As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens.
+
+Due to the stateless nature of the protocol, the runtime will only use any individual connection once. It is opened by the origin of the call, the call is sent, and then the connection is terminated. Only incoming connnections and other tasks can enqueue tasks, so once the task queue is empty there is nothing to do but listen for connections. This single-threaded approach does have the downside that connections can only be received while the task queue is empty, but a well designed system should be able to work around this flaw.
 
 In order to explore how the runtime communicates, consider the following (An API reference is in the next two sections for specific definitions of individual functions);
 
@@ -281,20 +274,94 @@ NIH_VOID(fail, param){
 If A then B is turned on, the following events occur from the perspective of the user;
 
 \begin{enumerate}
-\item Directory server is turned reset.
+\item Directory server is reset.
 \item Device A turns on, connects to wifi, and registers its master machine.
-\item Device A executes its entry function, which is empty.
+\item Machine \( x \) executes its entry function, which is empty.
 \item Device B turns on, connects to wifi, and registers its master machine.
-\item Device B executes its entry function, querying a non-local machine from the runtime, and sending it a call for the \texttt{RPC()} function, with the \texttt{success} and \texttt{fail} functions as the possible outcomes of the call. The call has no parameter.
-\item Device A receives the call, and begins to execute \texttt{RPC()}.
+\item Machine \( y \) executes its entry function, querying a non-local machine from the runtime, and sending it a call for the \texttt{RPC()} function, with the \texttt{success()} and \texttt{fail()} functions as the possible outcomes of the call. The call has no parameter.
+\item Device A receives the call, records the IP address of Machine \( y \) (previously unkown because A turned on before B) and begins to execute \texttt{RPC()}.
 \item Device A queries \lq A.B' from machine \( x \)'s persistent JSON storage. In this example, this returns \lq hello, world'.
-\item Device A returns the string to Device B by calling the \texttt{success()} function.
+\item Machine \( y \) returns the string to Machine \( x \) by calling the \texttt{success()} function.
 \item Device A prints out \lq hello, world'.
 \end{enumerate}
 
-If Device B were to encounter a fatal, non-recoverable error in its execution of \texttt{RPC}, it would call \texttt{fail()} instead of \texttt{success()}. Giving too much information in an error message such as the specific exception has been known to create security flaws, including ones that can be used to extract sensitive data \cite{weberror}. For this reason, any error internal to the users code always calls the fail handler with the parameter set to \lq execution error'.
+If Device B were to encounter a fatal, non-recoverable error in its execution of \texttt{RPC}, it would call \texttt{fail()} instead of \texttt{success()}. Giving too much information in an error message such as the specific exception has been known to create security flaws, including ones that can be used to extract sensitive data \cite{weberror}. For this reason, any error internal to the users code calls the fail handler with the parameter set a generic all-encompassing message, \lq execution error'.
 
-On a lower level, however, this process is more complicated.
+On a lower level, however, this process is more complicated. The code touches communication, encryption, JSON storage, and WASM execution.  Sequence diagrams can be used to help explain registering and querying machines to the directory, which are contained in steps 2 and 4;
+
+\begin{center}
+\begin{tikzpicture}[
+box/.style={rectangle, draw=black, fill=white, very thick, minimum width=25mm, minimum height=7.5mm, align=center},
+empty/.style=
+]
+\node[box](dir){\textbf{Directory Server}\\(HTTP)};
+\node[box](dev)[right of = dir, node distance=5cm]{\textbf{Device}};
+\node[box](init_dev)[below of = dev, node distance=1.5cm]{Initialization};
+\node[box](dev_register)[below of = init_dev, node distance=1.5cm]{Send POST request\\containing master\\descriptors};
+\node[box](dir_register)[left of = dev_register, node distance=5cm]{Record\\Machine};
+\node[box](dev_query_get)[below of = dev_register, node distance=1.5cm]{Send GET request};
+\node[empty](dir_get_guide)[left of = dev_query_get, node distance=5cm]{};
+\node[box](dir_query_get)[below of = dir_get_guide, node distance=7.5mm]{Look up\\machines};
+\node[box](dev_query_receive)[below of = dev_query_get, node distance=1.5cm]{Record machines from\\GET request};
+
+\draw[densely dotted] (dir) -- (dir_register);
+\draw[densely dotted] (dev) -- (init_dev);
+\draw[densely dotted] (init_dev) -- (dev_register);
+\draw[densely dotted] (dir_register) -- (dir_query_get);
+\draw[densely dotted] (dev_register) -- (dev_query_get);
+\draw[densely dotted] (dev_query_get) -- (dev_query_receive);
+
+\draw[->] (dev_register) -- (dir_register);
+\draw[->] (dev_query_get.west) -- (dir_query_get.north east);
+\draw[->] (dir_query_get.south east) -- (dev_query_receive.west);
+
+\end{tikzpicture}
+\end{center}
+
+The POST request is a machine descriptor, containing the IP addresss and public key of the target machine in the form \texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}. Only a single machine may be registered at once, but several POSTs may be made to register several machines. If a given machine is re-registered with a new IP address, the old IP address is deleted and the new IP is added instead. Because devices may turn on or off, or lose internet connection, the IP address in the directory may not be the most up to date, and may not work at all. All directory server operations happen on port 80 (the standard HTTP port), and against the root (http://address/) file. Because the directory server gives publicly available information, it is not encrypted with HTTPS.
+
+When a get request is made to the HTTP server, it will collate all known machines not at the requesting device's IP address, and send them to the device. It does this by first sending a count of how many descriptors will be sent, followed by a newline, then the descriptors alos seperated by newlines;
+
+\texttt{4 \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY \newline
+IP\_ADDR:HEX\_PUBLIC\_KEY
+}
+
+Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrpyted) packets containing the actual function to call. The structure of the outer packet is straightforward;
+
+\begin{table}[h]
+\begin{tabular}{|p{25mm}|l|l|p{45mm}|}
+\hline
+\textbf{Field Name}	& \textbf{Start byte}	& \textbf{End byte}		& \textbf{Description} \\ \hline
+Origin Pub					& 0									& 31							& Public Key of origin machine \\ \hline
+Destination Pub			& 32								& 63							& Public Key of destination machine \\ \hline
+Contents Length			& 63								& 79							& True pre-encryption length of inner packet \\ \hline
+Body								& 80								& N								& Encrypted data (first 16 bytes are the Initialization Vector) \\ \hline
+\end{tabular}
+\end{table}
+
+The first three (Origin and Destination Pub, Contents Length) fields are contained within the \texttt{packet\_header} struct for ease of handling. The only thing that can be told from intercepted packets, without the shared secret, is the message endpoint machines and the message length and frequency. While it may allow an attacker to deduce the general nature of the communication, they should not be able to deduce its content. SSL exposes similar information through port numbers and message lengths, and it is considered highly secure.
+
+Once the packet has been decrypted, is parsed as an inner packet.
+
+\begin{table}[h]
+\begin{tabular}{|p{25mm}|l|l|p{45mm}|}
+\hline
+\textbf{Field Name}	& \textbf{Start byte}		& \textbf{End byte}		& \textbf{Description} \\ \hline
+Destination I				& 0											& 11									& ID of the target machine. Used to verify packet has been decoded correctly.  \\ \hline
+Function name				& 12										& 31									& Name of the function to call. Null-terminated string.  \\ \hline
+On Success					& 32										& 51									& Name of the function to call on origin machine if this task completes successfully. Null-terminated string. \\ \hline
+On Failure					& 52										& 71									& Name of the function to call on origin machine if this task does not complete successfully. Null-terminated string. \\ \hline
+Parameter Null			& 72										& 72									& Is the parameter null? \\ \hline
+Parameter						& 73										& N										& Null-terminated parameter \\ \hline
+\end{tabular}
+\end{table}
+
+Like the outer packet, Function name to Parameter Null are incorporated into a struct for ease of handling. This is called \texttt{wire\_task}, and incorporates all of the information needed to execute the task, other than the origin and destination machine. The last two, as well as device-specific data are in the \texttt{task} struct. Both \texttt{wire\_task} and \texttt{task} are usually followed directly in memory by the null-terminated parameter if any exists, but this cannot be inside of the struct because it is of varying length.
+
+
 
 \subsubsection{Nihilo API Macros}
 
