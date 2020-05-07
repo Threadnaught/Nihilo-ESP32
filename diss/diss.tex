@@ -291,7 +291,7 @@ On a lower level, however, this process is more complicated. The code touches co
 
 \begin{center}
 \begin{tikzpicture}[
-box/.style={rectangle, draw=black, fill=white, very thick, minimum width=25mm, minimum height=7.5mm, align=center},
+box/.style={rectangle, draw=black, fill=white, very thick, minimum width=40mm, minimum height=12mm, align=center},
 empty/.style=
 ]
 \node[box](dir){\textbf{Directory Server}\\(HTTP)};
@@ -342,7 +342,7 @@ Body								& 80								& N								& Encrypted data (first 16 bytes are the Init
 \end{tabular}
 \end{table}
 
-The first three (Origin and Destination Pub, Contents Length) fields are contained within the \texttt{packet\_header} struct for ease of handling. The only thing that can be told from intercepted packets, without the shared secret, is the message endpoint machines and the message length and frequency. While it may allow an attacker to deduce the general nature of the communication, they should not be able to deduce its content. SSL exposes similar information through port numbers and message lengths, and it is considered highly secure.
+The first three (Origin and Destination Pub, Contents Length) fields are contained within the \texttt{packet\_header} struct for ease of handling. The only thing that can be told from intercepted packets, without the shared secret, is the message endpoint machines and the message length and frequency. While it may allow an attacker to deduce the general nature of the communication, they should not be able to tell its content. SSL exposes similar information through port numbers and message lengths, and is considered highly secure.
 
 Once the packet has been decrypted, is parsed as an inner packet.
 
@@ -350,7 +350,7 @@ Once the packet has been decrypted, is parsed as an inner packet.
 \begin{tabular}{|p{25mm}|l|l|p{45mm}|}
 \hline
 \textbf{Field Name}	& \textbf{Start byte}		& \textbf{End byte}		& \textbf{Description} \\ \hline
-Destination I				& 0											& 11									& ID of the target machine. Used to verify packet has been decoded correctly.  \\ \hline
+Destination ID			& 0											& 11									& ID of the target machine. Used to verify packet has been decoded correctly.  \\ \hline
 Function name				& 12										& 31									& Name of the function to call. Null-terminated string.  \\ \hline
 On Success					& 32										& 51									& Name of the function to call on origin machine if this task completes successfully. Null-terminated string. \\ \hline
 On Failure					& 52										& 71									& Name of the function to call on origin machine if this task does not complete successfully. Null-terminated string. \\ \hline
@@ -359,9 +359,59 @@ Parameter						& 73										& N										& Null-terminated parameter \\ \hline
 \end{tabular}
 \end{table}
 
-Like the outer packet, Function name to Parameter Null are incorporated into a struct for ease of handling. This is called \texttt{wire\_task}, and incorporates all of the information needed to execute the task, other than the origin and destination machine. The last two, as well as device-specific data are in the \texttt{task} struct. Both \texttt{wire\_task} and \texttt{task} are usually followed directly in memory by the null-terminated parameter if any exists, but this cannot be inside of the struct because it is of varying length.
+Like the outer packet, Function name to Parameter Null are incorporated into a struct for ease of handling. This is called \texttt{wire\_task}, and incorporates all of the information needed to execute the task, other than the origin and destination machine. These public keys, as well as device-specific data are in the \texttt{task} struct. Both \texttt{wire\_task} and \texttt{task} are usually followed directly in memory by the null-terminated parameter if any exists, but this cannot be inside of the struct because it is of varying length.
+
+How these packets are used can also be explained with a sequence diagram. This one covers steps 4 to 9;
+
+\begin{center}
+\begin{tikzpicture}[
+box/.style={rectangle, draw=black, fill=white, very thick, minimum width=40mm, minimum height=12mm, align=center},
+empty/.style=
+]
+\node[box](a){\textbf{Device A}};
+\node[box](b)[right of = a, node distance=5cm]{\textbf{Device B}};
+
+\node[box](b_init)[below of = b, node distance=1.5cm]{Initialization, directory\\server query};
+\node[box](b_queue_entry)[below of = b_init, node distance=1.5cm]{Queue machine \( y \)'s\\function \texttt{entry}};
+\node[box](b_begin_entry)[below of = b_queue_entry, node distance=1.5cm]{Execute \texttt{entry},\\ queue \texttt{RPC} to run on\\machine \( x \)};
+\node[box](b_send_rpc)[below of = b_begin_entry, node distance=1.5cm]{Encrypt and send\\queued task};
+\node[box, minimum height = 4.2cm](b_listen)[below of = b_send_rpc, node distance=3cm]{Listen for\\incoming connnections};
+
+\node[box, minimum height = 4.2cm](a_pre_listen)[left of = b_queue_entry, node distance=5cm]{Listen for\\incoming connnections};
+\node[box](a_queue_rpc)[left of = b_send_rpc, node distance=5cm]{Receive, decrypt,\\verify and queue\\received task};
+\node[box](a_store_y)[below of = a_queue_rpc, node distance=1.5cm]{Store IP of\\machine \( y \)};
+\node[box](a_exec_rpc)[below of = a_store_y, node distance=1.5cm]{Execute \texttt{RPC}, query\\data from JSON};
+\node[box](a_queue_success)[below of = a_exec_rpc, node distance=1.5cm]{Queue \texttt{success} to\\run on machine \( y \)};
+\node[box](a_send_success)[below of = a_queue_success, node distance=1.5cm]{Encrypt and send\\queued task};
+\node[box](a_listen)[below of = a_send_success, node distance=1.5cm]{Listen for\\incoming connnections};
+
+\node[box](b_queue_success)[right of = a_send_success, node distance=5cm]{Receive, decrypt,\\verify and queue\\received task};
+\node[box](b_begin_success)[below of = b_queue_success, node distance=1.5cm]{Execute \texttt{success},\\print result to user};
+
+\draw[densely dotted] (a) -- (a_pre_listen);
+\draw[densely dotted] (a_pre_listen) -- (a_queue_rpc);
+\draw[densely dotted] (a_queue_rpc) -- (a_store_y);
+\draw[densely dotted] (a_store_y) -- (a_exec_rpc);
+\draw[densely dotted] (a_exec_rpc) -- (a_queue_success);
+\draw[densely dotted] (a_queue_success) -- (a_send_success);
+\draw[densely dotted] (a_send_success) -- (a_listen);
 
 
+\draw[densely dotted] (b) -- (b_init);
+\draw[densely dotted] (b_init) -- (b_queue_entry);
+\draw[densely dotted] (b_queue_entry) -- (b_begin_entry);
+\draw[densely dotted] (b_begin_entry) -- (b_send_rpc);
+\draw[densely dotted] (b_send_rpc) -- (b_listen);
+\draw[densely dotted] (b_listen) -- (b_queue_success);
+\draw[densely dotted] (b_queue_success) -- (b_begin_success);
+
+\draw[->] (b_send_rpc) -- (a_queue_rpc);
+\draw[->] (a_send_success) -- (b_queue_success);
+
+\end{tikzpicture}
+\end{center}
+
+Device A stores machine \( y \)'s IP address and public key when the task is received, because device A turns on before B. Because the directory server is only queried by the Nihilo runtime when the device boots, device A has no knowledge of device B or machine \( y \) until it receives the first packet. Device B does not do the same when it receives its message because it already knows about machine \( x \).
 
 \subsubsection{Nihilo API Macros}
 
