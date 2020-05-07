@@ -5,9 +5,9 @@
 \usepackage{glossaries}
 \usepackage{mathtools}
 \usepackage{xcolor}
+\usepackage{tcolorbox}
 
 \begin{document}
-
 \section{Abstract}
 
 \tableofcontents
@@ -114,7 +114,9 @@ Wasm3 was chosen for this project.
 \subsection{Implementation}
 \subsubsection{Machines}
 
-The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another, using remote procedure calls. Permanent storage for both data as JSON, and code as WASM is provided by the SPIFFS flash filesystem.
+The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another, using remote procedure calls. Within SPIFFS, each machine is represented by a JSON and WASM file; the JSON storing data and the WASM storing code.
+
+Many machines can be stored on one device, potentially including machines providing self-contained units of functionality developed by third parties. In order to be useful, however, the user must create a single, master machine, tying together all of the others. When the device boots it will connect to WiFi, load the master machine, and execute its \texttt{entry()} function. This can then be used to instantiate functionality in other machines.
 
 \subsubsection{Security Model}
 
@@ -124,7 +126,7 @@ For security purposes, machines are sandboxed from eachother, but have absolute 
 \item The message can be read only by the stated destination.
 \end{itemize}
 
-RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of it's keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
+RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of its keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
 
 ECC \cite{ecc}(Elliptic Curve Cryptography) is a set of cryptographic primitives based on modular elliptic curves. ECC was built into an asymmetric cryptosystem called ECDH (Elliptic Curve Diffie-Hellman), which is far more computationally efficent than RSA. It has a number of advantages over RSA;
 \begin{itemize}
@@ -160,7 +162,7 @@ The most important factor in creating a random identifier is minimizing the risk
 
 Protecting against a targeted birthday attack, attempting to forge an ID for one specific target, can be acheived with an 8-byte ID, corresponding to a search space \( 2^{8 \times 8} \) hashes wide. If it was possible to check at a rate of 1,000,000 hashes per second, the search space would be exhausted after more than 500,000 years.
 
-It is, however, insufficient to ensure that attackers cannot artificially create a fraudulent ID. The 12-byte length of the ID was not chosen to prevent brute forcing of a \textbf{specific ID}, but to prevent any \textbf{pair of IDs} happening to be identical. This is both more likely on a per-ID basis and happens more often, every time a machine is created on any device. Assuming the hardware random number generator and SHA256 algorithm are both mathematically ideal, the ID space is \( 2^{12 \times 8} \) hashes wide. If \( p \) is the number of assigned hashes, the probability that there exists at least one pair which are the same, \( n \), is approximated by the following formula\cite{birth};
+It is, however, insufficient to ensure that attackers cannot artificially create a fraudulent ID. The 12-byte length of the ID was not chosen to prevent brute forcing of a \textbf{specific ID}, but to prevent any \textbf{pair of IDs} happening to be identical. This is both more likely on a per-ID basis and happens more often, every time a machine is created on any device. Assuming the hardware random number generator and SHA256 algorithm are both mathematically ideal, the ID space is \( 2^{12 \times 8} \) hashes wide. If \( n \) is the number of assigned hashes, the probability that there exists at least one pair which are the same, \( p \), is approximated by the following formula\cite{birth};
 
 \[ n = \sqrt{2 \times 2^{12 \times 8} \times ln\frac{1}{1-p}}\]
 
@@ -234,29 +236,89 @@ Tasks are encapsulated within the \texttt{task} struct, containing;
 
 Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
 
-As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because, unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. Responses to messages are not implemented at the protocol layer because they exist at the function layer. It is asynchronous because it cannot wait for replies to messages, rather invokes new actions once the replies are received.
+As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens.
+
+In order to explore how the runtime communicates, consider the following (An API reference is in the next two sections for specific definitions of individual functions);
+
+Device A has master machine \( x \), with the following code;
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(entry, param);
+NIH_CHARS(RPC, param){
+  char* ret;
+  //read A.B out of x's JSON, E.G. "hello, world"
+  readString("A.B", &ret);
+  return ret;
+}
+\end{verbatim}
+\end{tcolorbox}
 
 
+Device B has master machine \( y \), with the following code;
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(entry, param){
+  unsigned char* ids;
+  //find the peer:
+  int known = knownPubs(&ids, 0, 1);
+  //if the peer is found, call RPC against it
+  if(known > 0)
+    queue(ids, "RPC", nullptr, "success", "fail");
+}
+NIH_VOID(success, param){
+  logStr("success");
+  if(param != nullptr)
+    logStr(param);
+}
+NIH_VOID(fail, param){
+  logStr("failure");
+  if(param != nullptr)
+    logStr(param);
+}
+\end{verbatim}
+\end{tcolorbox}
+
+If A then B is turned on, the following events occur from the perspective of the user;
+
+\begin{enumerate}
+\item Directory server is turned reset.
+\item Device A turns on, connects to wifi, and registers its master machine.
+\item Device A executes its entry function, which is empty.
+\item Device B turns on, connects to wifi, and registers its master machine.
+\item Device B executes its entry function, querying a non-local machine from the runtime, and sending it a call for the \texttt{RPC()} function, with the \texttt{success} and \texttt{fail} functions as the possible outcomes of the call. The call has no parameter.
+\item Device A receives the call, and begins to execute \texttt{RPC()}.
+\item Device A queries \lq A.B' from machine \( x \)'s persistent JSON storage. In this example, this returns \lq hello, world'.
+\item Device A returns the string to Device B by calling the \texttt{success()} function.
+\item Device A prints out \lq hello, world'.
+\end{enumerate}
+
+If Device B were to encounter a fatal, non-recoverable error in its execution of \texttt{RPC}, it would call \texttt{fail()} instead of \texttt{success()}. Giving too much information in an error message such as the specific exception has been known to create security flaws, including ones that can be used to extract sensitive data \cite{weberror}. For this reason, any error internal to the users code always calls the fail handler with the parameter set to \lq execution error'.
+
+On a lower level, however, this process is more complicated.
 
 \subsubsection{Nihilo API Macros}
 
 \textbf{\texttt{NIH\_VOID(NAME, PARAMNAME)}}\newline
 Create a new Nihilo-exposed function with name \texttt{NAME}, and a \texttt{const char*} parameter called \texttt{PARAMNAME}. Replaces the normal function declaration. If it is called with no parameter, \texttt{PARAMNAME} will equal \texttt{nullptr}.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(entry, param){
   logStr("hello, world!);
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{NIH\_CHARS(NAME, PARAMNAME)}}\newline
 Same as \texttt{NIH\_VOID(NAME, PARAMNAME)}, but returns a \texttt{const char *}.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_CHARS(entry, param){
   return "hello, world.";
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{WASM\_IMPORT(MODULE,NAME)}}\newline
 Internal macro, assisting with exposing functions to the user.
@@ -266,6 +328,7 @@ Internal macro, assisting with exposing functions to the user.
 \textbf{\texttt{void mallocWasm(void** target, uint32\_t size)}}\newline
 Replacement for malloc(). Pointer pointed to by \texttt{target} is is set to point to a new buffer of length \texttt{size} bytes. Allocates heap inside of wasm3's memory space.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(entry, param){
   char* buf;
@@ -274,19 +337,23 @@ NIH_VOID(entry, param){
   logStr(buf);
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{void writeString(const char* path, const char* value)}}\newline
 Saves \texttt{value} in \texttt{path} in the current machine's JSON. Only objects and strings are currently supported to save, and only strings to directly edit, deliniated by full stops(\texttt{.}). If the write is under an object that doesn't yet exist, it will create that object.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(save_value, param){
   writeString("A.B.C.Str", param);
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{void readString(const char* path, char** target)}}\newline
 Looks up \texttt{path} in the current machine's JSON. Pointer pointed to by \texttt{target} is set to point to the value read out of JSON.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(log_value, param){
   char* val;
@@ -295,10 +362,12 @@ NIH_VOID(log_value, param){
     logStr(val);
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{int knownPubs(unsigned char** IdsOut, int include\_local, int include\_non\_local)}}\newline
 Lists machines currently known to this device. if \texttt{include\_local} is set to 0, machines on the device will be excluded from the list. Similarly, if \texttt{include\_non\_local} is set to 0, machines not on the device will be excluded. \texttt{IdsOut} is set to point to a list of the 32-byte public keys of the requested devices, and the function returns the number of machines which have been included in \texttt{IdsOut}.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(log_value, param){
   unsigned char* ids;
@@ -307,22 +376,26 @@ NIH_VOID(log_value, param){
     logStr("Devices knows of non-local machines");
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{void logStr(const char* tolog)}}\newline
 Log a string to the user, using the ESP-IDF monitoring program.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(log_value, param){
   logStr("hello, world");
 }
 \end{verbatim}
+\end{tcolorbox}
 
 \textbf{\texttt{void queue(const unsigned char* target\_pub, const char* fname, const char* param, const char* onsuccess, const char* onfail)}}\newline
 Add a new task to the back of the queue, to be executed after every other task currently on the queue. The task will be sent to \texttt{target\_pub}, either directly if it is on this device, or through an encrypted socket if it is on another. If \texttt{target\_pub} is nullptr, it will be sent to the current machine. The target device will execute \texttt{fname(param)}, and pass its result to \texttt{onsuccess} in this machine if it is a success, or \texttt{onfail if not}. \texttt{param}, \texttt{onsuccess} and \texttt{onfail} may be set to \texttt{nullptr}, but \texttt{fname} must be a valid string.
 
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(entry, param){
-  queue(nullptr, "test", "hello, world!", "success", nullptr);
+  queue(nullptr, "test", "hello!", "success", nullptr);
 }
 NIH_CHARS(test, param){
   logStr(param);
@@ -332,11 +405,14 @@ NIH_VOID(success, param){
   logStr(param);
 }
 \end{verbatim}
+\end{tcolorbox}
 This example prints;
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
-hello, world!
+hello!
 response
 \end{verbatim}
+\end{tcolorbox}
 \textbf{\texttt{void setReturn (const char* ret)}}\newline
 Internal function, assisting with returning data to the runtime.
 
@@ -379,5 +455,7 @@ Internal function, assisting with passing the parameter from the runtime to WASM
 	\url{http://www.winlab.rutgers.edu/comnet2/Reading/documents/Birthday_attack.pdf}
 \bibitem{pigeon}
 	\url{https://www.math.ust.hk/~mabfchen/Math391I/Pigeonhole.pdf}
+\bibitem{weberror}
+  \url{https://owasp.org/www-community/Improper_Error_Handling}
 \end{thebibliography}
 \end{document}
