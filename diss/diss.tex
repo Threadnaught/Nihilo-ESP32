@@ -117,7 +117,7 @@ The cJson package is included in IDF, and was used for all storage in this proje
 Although the target of this project is the ESP-32, the goal is for it to be architecture agnostic.
 This includes both running on different instruction sets and running on different types of computer including desktops and servers.
 The problem of targeting different types of device using the same standard is similar to the problem websites were made to solve.
-The environment of the web adds the bonus that browser-based runtimes are sandboxed and have been aggressivley tested for vulnerabilities.
+The environment of the web adds the bonus that browser-based runtimes are sandboxed and have been aggressively tested for vulnerabilities.
 The traditionally accepted web language, used in both NodeJS and IoT-DSA, is Javascript.
 
 Javascript, though popular, is a bad fit for creating this platform.
@@ -127,12 +127,12 @@ Emscripten and later WebAssembly were created to enable C-style languages on the
 The former compiles code to a highly optimizable subset of Javascript, asm.js, which is backwards compatible with any Javascript engine but runs at near-native speeds in a supported one \cite{asm}.
 The latter is an extension to asm.js which abandons the link to Javascript entirely, compiling code to a new instruction set running on an idealised processor \cite{wasm}.
 
-WebAssembly (often shortened to wasm) is intended to be executed using a AOT (ahead of time)  or JIT (just in time) compiler, translating the abstract wasm instructions into real instructions to be executed on the processor.
+WebAssembly (often shortened to WASM) is intended to be executed using a AOT (ahead of time)  or JIT (just in time) compiler, translating the abstract WASM instructions into real instructions to be executed on the processor.
 The difference between JIT and AOT is that AOTs translate into code before the program is run, while JITs compile just before the code is executed.
 JITs are generally faster because they can optimize based not just on static analysis but also the actual, runtime values of the variables being used.
 Slower than both types of compiler are interpreters, which iterate over the commands one by one and execute them by calling functions associated with each command.
-Although compilers are prefereable, they are harder to implment, harder to secure, harder to debug, and require porting to each instruction set they must run on.
-Because of wasm's relative immaturity, only two partially implemented runtimes exist for embedded architectures;
+Although compilers are prefereable, they are harder to implement, harder to secure, harder to debug, and require porting to each instruction set they must run on.
+Because of WASM's relative immaturity, only two partially implemented runtimes exist for embedded architectures;
 \begin{itemize}
 \item WebAssembly Micro Runtime (WAMR), the official Bytecode Alliance runtime for running webassembly on microcontrollers.
 WAMR can run both in AOT and interpreter mode.
@@ -153,7 +153,7 @@ Many machines can be stored on one device, potentially including machines provid
 
 \subsubsection{Security Model}
 
-For security purposes, machines are sandboxed from eachother, but have absolute power over their internal environment. This is because machines are from a single origin, analogous to how javascript has absolute power over its own HTML under the same origin policy, but can only communicate with others through specific channels. Every machine in Nihilo has an asymmetric keypair. Because every communication in Nihilo has an origin and destination machine, it can be cryptographically verified that;
+For security purposes, machines are sandboxed from each other, but have absolute power over their internal environment. This is because machines are from a single origin, analogous to how javascript has absolute power over its own HTML under the same origin policy, but can only communicate with others through specific channels. Every machine in Nihilo has an asymmetric keypair. Because every communication in Nihilo has an origin and destination machine, it can be cryptographically verified that;
 \begin{itemize}
 \item The message was sent only by the stated origin.
 \item The message can be read only by the stated destination.
@@ -161,10 +161,10 @@ For security purposes, machines are sandboxed from eachother, but have absolute 
 
 RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of its keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
 
-ECC \cite{ecc}(Elliptic Curve Cryptography) is a set of cryptographic primitives based on modular elliptic curves. ECC was built into an asymmetric cryptosystem called ECDH (Elliptic Curve Diffie-Hellman), which is far more computationally efficent than RSA. It has a number of advantages over RSA;
+ECC \cite{ecc}(Elliptic Curve Cryptography) is a set of cryptographic primitives based on modular elliptic curves. ECC was built into an asymmetric cryptosystem called ECDH (Elliptic Curve Diffie-Hellman), which is far more computationally efficient than RSA. It has a number of advantages over RSA;
 \begin{itemize}
 \item Keygen is finished in 200ms, a 100 times speedup.
-\item ECDH is not an encryption algorithm, but a key agreement protocol where all of the necassary information is already embedded in the public key of the peer. Both RSA and ECDH need a symmetric encryption algorithm for the bulk exchange of data, but RSA requires a dedicated protocol to send the encrypted symmetric key from one peer to the other while ECDH does not.
+\item ECDH is not an encryption algorithm, but a key agreement protocol where all of the necessary information is already embedded in the public key of the peer. Both RSA and ECDH need a symmetric encryption algorithm for the bulk exchange of data, but RSA requires a dedicated protocol to send the encrypted symmetric key from one peer to the other while ECDH does not.
 \item ECC curve25519 public and private keys are 32 bytes long, as opposed to at least 128 bytes with RSA.
 \item Every pair of peers has its own secret, which requires the private key of one and the public key of the other. This negates the need for a dedicated signature, which would be required under RSA.
 \end{itemize}
@@ -181,25 +181,25 @@ There are two desired capabilities of any asymmetric encryption scheme; security
 \item A hybrid approach, where trust is rooted in SSL but becomes transferred to Nihilo at some point down the chain to the device attempting to authenticate.
 \end{itemize}
 
-Ultimatley, the alternative to building a PKI chosen was using the public keys as the primary identifier of a machine. Because there is no known mechanism to efficently forge a public key, the resulting keys are almost guaranteed to be unique.
+Ultimately, the alternative to building a PKI chosen was using the public keys as the primary identifier of a machine. Because there is no known mechanism to efficiently forge a public key, the resulting keys are almost guaranteed to be unique.
 
-Once ECDH has been run, transforming a keypair of one machine and a public key of the other into a shared secret, the message must be symmetrically encrypted. The algorithm chosen was AES\cite{aes}, an efficent block cipher. AES works one block at a time, applying encryption to 16 bytes, then moving on to the next 16 bytes. The original implementation of AES, called ECB mode, had a flaw where identical blocks were encrypted as identical ciphertext, exposing ECB encryption to a variety of attacks, which were rectified with CBC mode. This mode uses the previous block to help encrypt the next, so requires an initialization vector to randomise the first block.
+Once ECDH has been run, transforming a keypair of one machine and a public key of the other into a shared secret, the message must be symmetrically encrypted. The algorithm chosen was AES\cite{aes}, an efficient block cipher. AES works one block at a time, applying encryption to 16 bytes, then moving on to the next 16 bytes. The original implementation of AES, called ECB mode, had a flaw where identical blocks were encrypted as identical ciphertext, exposing ECB encryption to a variety of attacks, which were rectified with CBC mode. This mode uses the previous block to help encrypt the next, so requires an initialization vector to randomise the first block.
 
 Because the initialization vector is required to decrypt the data, it is included in Nihilo as the 0th block of any encrypted data. If \(x\) is the length of the unencrypted data and b is the block size (16 bytes), the formula for calculating the length of encrypted data is as follows;
 
 \[ ( \lceil x/b \rceil +1) \times b\]
 
-32-byte public keys can be unweildy, for instance SPIFFS filenames are limited to 31 characters long including extension. In order to simplify this, and to make user interface easier, a 12-byte ID can be used. This is the first 12-bytes of the SHA256 digest of the public key. It is worth noting that while creating a fraudulent key with the same ID is extremely computationally intensive, it is not outside the realm of possibility with future machines, so IDs cannot provide the same security guarantees as public keys. Between devices, Nihilo always uses the full 32 byte public key.
+32-byte public keys can be unwieldy, for instance SPIFFS filenames are limited to 31 characters long including extension. In order to simplify this, and to make user interface easier, a 12-byte ID can be used. This is the first 12-bytes of the SHA256 digest of the public key. It is worth noting that while creating a fraudulent key with the same ID is extremely computationally intensive, it is not outside the realm of possibility with future machines, so IDs cannot provide the same security guarantees as public keys. Between devices, Nihilo always uses the full 32 byte public key.
 
 The most important factor in creating a random identifier is minimizing the risk that two entities are randomly assigned the same ID. Poorly engineered identification schemes are vulnerable to a class of exploits known as birthday attacks, in which a forged entity that happens to have the same ID can impersonate the target entity. Thanks to the pigeonhole principle\cite{pigeon}, it is known that any mapping which reduces a large space (all public keys) down to a smaller space (all IDs) must have distinct items in the large space which map to the same item in the small one. In the context of hashing, this is known as a hash collision.
 
-Protecting against a targeted birthday attack, attempting to forge an ID for one specific target, can be acheived with an 8-byte ID, corresponding to a search space \( 2^{8 \times 8} \) hashes wide. If it was possible to check at a rate of 1,000,000 hashes per second, the search space would be exhausted after more than 500,000 years.
+Protecting against a targeted birthday attack, attempting to forge an ID for one specific target, can be achieved with an 8-byte ID, corresponding to a search space \( 2^{8 \times 8} \) hashes wide. If it was possible to check at a rate of 1,000,000 hashes per second, the search space would be exhausted after more than 500,000 years.
 
 It is, however, insufficient to ensure that attackers cannot artificially create a fraudulent ID. The 12-byte length of the ID was not chosen to prevent brute forcing of a \textbf{specific ID}, but to prevent any \textbf{pair of IDs} happening to be identical. This is both more likely on a per-ID basis and happens more often, every time a machine is created on any device. Assuming the hardware random number generator and SHA256 algorithm are both mathematically ideal, the ID space is \( 2^{12 \times 8} \) hashes wide. If \( n \) is the number of assigned hashes, the probability that there exists at least one pair which are the same, \( p \), is approximated by the following formula\cite{birth};
 
 \[ n = \sqrt{2 \times 2^{12 \times 8} \times ln\frac{1}{1-p}}\]
 
-Collision probabilitiies are given by the following table
+Collision probabilities are given by the following table
 \begin{table}[h]
 \begin{tabular}{l|l|l}
 p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
@@ -217,7 +217,7 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 \subsection{Implementation}
 \subsubsection{Tooling}
 
-There are two major peices of tooling that were required to implement Nihilo;
+There are two major pieces of tooling that were required to implement Nihilo;
 \begin{itemize}
 \item A pass-through WiFi access point, to streamline network access for the ESP-32s
 \item A directory server, to facilitate discovery of peers
@@ -231,10 +231,10 @@ On boot, the Nihilo runtime registers owned machines to this service, and querie
 
 \subsubsection{Adding a simple heap to wasm3}
 
-One serious shortcoming in the wasm3 interpreter, which is not documented in their git repository, is the lack of runtime-allocated memory. The \texttt{void* malloc(size\_t size)} call in which memory is dynamically allocated from the heap, has not been implemented. Although only call-stack based memory is necassary for turing-completeness, heap-based memory can simplify programming.
+One serious shortcoming in the wasm3 interpreter, which is not documented in their git repository, is the lack of runtime-allocated memory. The \texttt{void* malloc(size\_t size)} call in which memory is dynamically allocated from the heap, has not been implemented. Although only call-stack based memory is necessary for Turing-completeness, heap-based memory can simplify programming.
 
 Wasm3 allocates memory in 65536 byte pages.
-In order to maintain the integrity of the sandbox, accessing memory outside of these pages halts execution, so any implementation of malloc must return a pointer somewhere inside of this page. The Nihilo runtime is built on small functions, which are instantiated, run, and asynchronously instantiate other functions. Each individual function has a very small memory footprint, and each wasm3 runtime exsits for a short period of time.
+In order to maintain the integrity of the sandbox, accessing memory outside of these pages halts execution, so any implementation of malloc must return a pointer somewhere inside of this page. The Nihilo runtime is built on small functions, which are instantiated, run, and asynchronously instantiate other functions. Each individual function has a very small memory footprint, and each wasm3 runtime exists for a short period of time.
 
 It was decided, as a consequence of the small memory footprint of each function, and the limitations to where memory can be allocated, to reserve page offsets 0x0000 to 0x7FFF (32768 bytes) for the stack, and to reserve offsets 0x8000 to 0xFFFF (32767 bytes) for a heap. Because these pages are cleaned up after a short time, no mechanism for freeing memory was created. A \texttt{uint16\_t} at page offset 0x8000 tracks the amount of allocated heap, and is incremented every time more is allocated. Breaking the Nihilo coding model, and creating highly recursive functions, or functions which allocated and freed a lot of memory, would in turn break this memory allocation scheme.
 
@@ -243,7 +243,7 @@ It was decided, as a consequence of the small memory footprint of each function,
 
 One problem encountered early on in the development of Nihilo was the limited RAM of the ESP-32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP-32, requiring these would break compatibility with most off-the-shelf ESP-32 modules.
 
-The solution is to use a FIFO (first in, first out) task queue. This allows wasm function calls to be placed onto the queue as tasks and executed one by one. These tasks may optionally also specify callbacks, placing new tasks onto the queue once execution is complete. Two machines can have an asynchronous 'dialogue' through callbacks without ever loading more than one of them at a time. This model can also be extened to communication if the queue also contains calls to machines on other devices, in which the execution is replaced with encrypting and sending the call.
+The solution is to use a FIFO (first in, first out) task queue. This allows WASM function calls to be placed onto the queue as tasks and executed one by one. These tasks may optionally also specify callbacks, placing new tasks onto the queue once execution is complete. Two machines can have an asynchronous 'dialogue' through callbacks without ever loading more than one of them at a time. This model can also be extended to communication if the queue also contains calls to machines on other devices, in which the execution is replaced with encrypting and sending the call.
 
 Tasks are encapsulated within the \texttt{task} struct, containing;
 \begin{itemize}
@@ -257,11 +257,11 @@ Tasks are encapsulated within the \texttt{task} struct, containing;
 \item The parameter to be passed to the function (a null terminated string, immediately following the struct in memory)
 \end{itemize}
 
-Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
+Because the last four are encrypted for any transmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
 
-As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens. Nihilo uses TCP because a high reliability is desired, through berkely sockets.
+As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens. Nihilo uses TCP because a high reliability is desired, through Berkeley sockets.
 
-Due to the stateless nature of the protocol, the runtime will only use any individual connection once. It is opened by the origin of the call, the call is sent, and then the connection is terminated. Only incoming connnections and other tasks can enqueue tasks, so once the task queue is empty there is nothing to do but listen for connections. This single-threaded approach does have the downside that connections can only be received while the task queue is empty, but a well designed system should be able to work around this flaw.
+Due to the stateless nature of the protocol, the runtime will only use any individual connection once. It is opened by the origin of the call, the call is sent, and then the connection is terminated. Only incoming connections and other tasks can enqueue tasks, so once the task queue is empty there is nothing to do but listen for connections. This single-threaded approach does have the downside that connections can only be received while the task queue is empty, but a well designed system should be able to work around this flaw.
 
 In order to explore how the runtime communicates, consider the following (An API reference is in the next two sections for specific definitions of individual functions);
 
@@ -311,7 +311,7 @@ If A then B is turned on, the following events occur from the perspective of the
 \item Machine \( x \) executes its entry function, which is empty.
 \item Device B turns on, connects to wifi, and registers its master machine.
 \item Machine \( y \) executes its entry function, querying a non-local machine from the runtime, and sending it a call for the \texttt{RPC()} function, with the \texttt{success()} and \texttt{fail()} functions as the possible outcomes of the call. The call has no parameter.
-\item Device A receives the call, records the IP address of Machine \( y \) (previously unkown because A turned on before B) and begins to execute \texttt{RPC()}.
+\item Device A receives the call, records the IP address of Machine \( y \) (previously unknown because A turned on before B) and begins to execute \texttt{RPC()}.
 \item Device A queries \lq A.B' from machine \( x \)'s persistent JSON storage. In this example, this returns \lq hello, world'.
 \item Machine \( y \) returns the string to Machine \( x \) by calling the \texttt{success()} function.
 \item Device A prints out \lq hello, world'.
@@ -350,9 +350,9 @@ empty/.style=
 \end{tikzpicture}
 \end{center}
 
-The POST request is a machine descriptor, containing the IP addresss and public key of the target machine in the form \texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}. Only a single machine may be registered at once, but several POSTs may be made to register several machines. If a given machine is re-registered with a new IP address, the old IP address is deleted and the new IP is added instead. Because devices may turn on or off, or lose internet connection, the IP address in the directory may not be the most up to date, and may not work at all. All directory server operations happen on port 80 (the standard HTTP port), and against the root (http://address/) file. Because the directory server gives publicly available information, it is not encrypted with HTTPS.
+The POST request is a machine descriptor, containing the IP address and public key of the target machine in the form \texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}. Only a single machine may be registered at once, but several POSTs may be made to register several machines. If a given machine is re-registered with a new IP address, the old IP address is deleted and the new IP is added instead. Because devices may turn on or off, or lose internet connection, the IP address in the directory may not be the most up to date, and may not work at all. All directory server operations happen on port 80 (the standard HTTP port), and against the root (http://address/) file. Because the directory server gives publicly available information, it is not encrypted with HTTPS.
 
-When a get request is made to the HTTP server, it will collate all known machines not at the requesting device's IP address, and send them to the device. It does this by first sending a count of how many descriptors will be sent, followed by a newline, then the descriptors alos seperated by newlines;
+When a get request is made to the HTTP server, it will collate all known machines not at the requesting device's IP address, and send them to the device. It does this by first sending a count of how many descriptors will be sent, followed by a newline, then the descriptors also separated by newlines;
 
 \texttt{4 \newline
 IP\_ADDR:HEX\_PUBLIC\_KEY \newline
@@ -361,7 +361,7 @@ IP\_ADDR:HEX\_PUBLIC\_KEY \newline
 IP\_ADDR:HEX\_PUBLIC\_KEY
 }
 
-Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrpyted) packets containing the actual function to call. The structure of the outer packet is straightforward;
+Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrypted) packets containing the actual function to call. The structure of the outer packet is straightforward;
 
 \begin{table}[h]
 \begin{tabular}{|p{25mm}|l|l|p{45mm}|}
@@ -407,15 +407,15 @@ empty/.style=
 \node[box](b_queue_entry)[below of = b_init, node distance=1.5cm]{Queue machine \( y \)'s\\function \texttt{entry}};
 \node[box](b_begin_entry)[below of = b_queue_entry, node distance=1.5cm]{Execute \texttt{entry},\\ queue \texttt{RPC} to run on\\machine \( x \)};
 \node[box](b_send_rpc)[below of = b_begin_entry, node distance=1.5cm]{Encrypt and send\\queued task};
-\node[box, minimum height = 4.2cm](b_listen)[below of = b_send_rpc, node distance=3cm]{Listen for\\incoming connnections};
+\node[box, minimum height = 4.2cm](b_listen)[below of = b_send_rpc, node distance=3cm]{Listen for\\incoming connections};
 
-\node[box, minimum height = 4.2cm](a_pre_listen)[left of = b_queue_entry, node distance=5cm]{Listen for\\incoming connnections};
+\node[box, minimum height = 4.2cm](a_pre_listen)[left of = b_queue_entry, node distance=5cm]{Listen for\\incoming connections};
 \node[box](a_queue_rpc)[left of = b_send_rpc, node distance=5cm]{Receive, decrypt,\\verify and queue\\received task};
 \node[box](a_store_y)[below of = a_queue_rpc, node distance=1.5cm]{Store IP of\\machine \( y \)};
 \node[box](a_exec_rpc)[below of = a_store_y, node distance=1.5cm]{Execute \texttt{RPC}, query\\data from JSON};
 \node[box](a_queue_success)[below of = a_exec_rpc, node distance=1.5cm]{Queue \texttt{success} to\\run on machine \( y \)};
 \node[box](a_send_success)[below of = a_queue_success, node distance=1.5cm]{Encrypt and send\\queued task};
-\node[box](a_listen)[below of = a_send_success, node distance=1.5cm]{Listen for\\incoming connnections};
+\node[box](a_listen)[below of = a_send_success, node distance=1.5cm]{Listen for\\incoming connections};
 
 \node[box](b_queue_success)[right of = a_send_success, node distance=5cm]{Receive, decrypt,\\verify and queue\\received task};
 \node[box](b_begin_success)[below of = b_queue_success, node distance=1.5cm]{Execute \texttt{success},\\print result to user};
@@ -489,7 +489,7 @@ NIH_VOID(entry, param){
 \end{tcolorbox}
 
 \textbf{\texttt{void writeString(const char* path, const char* value)}}\newline
-Saves \texttt{value} in \texttt{path} in the current machine's JSON. Only objects and strings are currently supported to save, and only strings to directly edit, deliniated by full stops(\texttt{.}). If the write is under an object that doesn't yet exist, it will create that object.
+Saves \texttt{value} in \texttt{path} in the current machine's JSON. Only objects and strings are currently supported to save, and only strings to directly edit, delineated by full stops(\texttt{.}). If the write is under an object that doesn't yet exist, it will create that object.
 
 \begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
