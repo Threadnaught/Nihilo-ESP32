@@ -8,6 +8,13 @@
 \usepackage{tcolorbox}
 \usepackage{tikz}
 \usetikzlibrary{positioning}
+\usepackage{fancyhdr}
+
+\renewcommand{\headrulewidth}{0pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\textcolor{red}{ROUGH DRAFT, PRE-SPELLCHECK}}
+\rfoot{\thepage}
 
 \begin{document}
 \section{Abstract}
@@ -19,30 +26,54 @@ These patterns; files, threads, device drivers, etc. are so powerful that comput
 Microprocessors typically support multitasking, networking, and are connected to large amounts of volatile and non-volatile storage.
 Microcontrollers, on the other hand, tend to be realtime, with primitive networking and EEPROM storage that often cannot be rewritten at runtime.
 
-As moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
-Because waiting for cheaper hardware is no longer a valid \lq optimization' stratergy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
-Although these new devices are traditionally classified as microcontrollers, theese new capabilities blur the line between the microcontrollers and microprocessors.
-The \lq super-mircocontroller' used in this project was the Espressif systems ESP-32.
+As Moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
+Because waiting for cheaper hardware is no longer a valid \lq optimization' strategy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
+Although these new devices are traditionally classified as microcontrollers, their capabilities blur the line between the microcontrollers and microprocessors.
+The \lq super-microcontroller' used in this project was the Espressif systems ESP-32.
 
-The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution, IO and communication in a simple to use and extensible platform.
+The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution and communication in a simple to use and extensible platform.
 Because implementing an entire platform of this scale is outside of the scope of a single-module dissertation, this project is more a proof-of-concept than a final version.
 Concessions have been made to simplicity to allow for experimentation, meaning that no guarantees can be made about security or speed.
 The project aims, however, to be well tested and stable.
 
 \pagebreak
 \section{Literature Review}
+\subsubsection{Execution}
 
+
+\subsubsection{Storage}
+\subsubsection{Communication}
 
 \section{Methodology}
-\subsection{Problem Description}
+\subsection{High-level Requirements}
+A good solution to this project should allow a user to:
+\begin{itemize}
+\item Compile code on their computer, and then execute it on their ESP-32. Preferably, this code should be:
+\begin{itemize}
+  \item Portable to multiple devices
+  \item Efficient to run in terms of memory and time
+  \item Supported by mature compilers
+\end{itemize}
+\item Save data to their device. At a minimum, this capability should:
+\begin{itemize}
+  \item Be able to save data while the device is off
+  \item Be able to structure the saved data
+\end{itemize}
+\item Communicate between devices. This communication should be:
+\begin{itemize}
+  \item Fast
+  \item Reliable
+  \item Secure
+\end{itemize}
+\end{itemize}
 \subsection{Technologies used}
 \subsubsection{ESP-32}
 
 Released in 2016, the Espressif Systems ESP-32 is a powerful dual-core microcontroller.
 It is based a Cadence IP core, which is in turn based on the Xtensa instruction set \cite{32datasheet}.
-This instruction set is often used for specalist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
+This instruction set is often used for specialist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
 Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
-A comparison between the ESP-32, Arduino Uno (with an ATmega328P mircocontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
+A comparison between the ESP-32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
 \begin{table}[h]
 \begin{tabular}{l|lll}
@@ -90,7 +121,7 @@ The environment of the web adds the bonus that browser-based runtimes are sandbo
 The traditionally accepted web language, used in both NodeJS and IoT-DSA, is Javascript.
 
 Javascript, though popular, is a bad fit for creating this platform.
-Efficent runtimes are large and are usually themselves very architecture-dependent.
+Efficient runtimes are large and are usually themselves very architecture-dependent.
 In addition, embedded developers tend to favour strong, static typing and DIY memory management, historically meaning C but a variety of newer languages such as Rust, Golang, and C++ have also been gaining popularity.
 Emscripten and later WebAssembly were created to enable C-style languages on the web.
 The former compiles code to a highly optimizable subset of Javascript, asm.js, which is backwards compatible with any Javascript engine but runs at near-native speeds in a supported one \cite{asm}.
@@ -113,7 +144,7 @@ Its simplicity also aids in modifications and experiments.
 
 Wasm3 was chosen for this project.
 
-\subsection{Implementation}
+\subsection{System Design}
 \subsubsection{Machines}
 
 The fundamental, indivisible unit of Nihilo is the machine; many machines can be stored on each physical device. Machines are an idealised and abstract version of a computer; communication, execution, and data storage all happen at the machine level. Communication between and within devices happens from one machine to another, using remote procedure calls. Within SPIFFS, each machine is represented by a JSON and WASM file; the JSON storing data and the WASM storing code.
@@ -183,6 +214,7 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 
 12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue, so there is much room for expansion.
 
+\subsection{Implementation}
 \subsubsection{Tooling}
 
 There are two major peices of tooling that were required to implement Nihilo;
@@ -227,7 +259,7 @@ Tasks are encapsulated within the \texttt{task} struct, containing;
 
 Because the last four are encrypted for any transmmission, they are contained within a struct inside of \texttt{task} called \texttt{wire\_task}. If the task executes successfully, and a success function has been set, a new task will be created. This task will have the return value (if there is any) of the previous task as its parameter, and the on success function as its target. The origin of one task becomes the destination of the next and vice versa.  Failures are treated in the same way, with a description of the error as their parameter.
 
-As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens.
+As with the rest of the runtime, the primary design goal of the Nihilo protocol was simplicity. Nihilo communicates using an encrypted, stateless, single-verb, asynchronous protocol. It is encrypted because every message can only be read by its sender or receiver. It is stateless because messages are not part of a sequence; a connection is made, used to send one message, and then closed. It is single-verb because unlike HTTP, the protocol only knows how to invoke a single type of action; calling a function. It is asynchronous because it does not block until a reply has been received, rather invoking a new function when this happens. Nihilo uses TCP because a high reliability is desired, through berkely sockets.
 
 Due to the stateless nature of the protocol, the runtime will only use any individual connection once. It is opened by the origin of the call, the call is sent, and then the connection is terminated. Only incoming connnections and other tasks can enqueue tasks, so once the task queue is empty there is nothing to do but listen for connections. This single-threaded approach does have the downside that connections can only be received while the task queue is empty, but a well designed system should be able to work around this flaw.
 
@@ -302,7 +334,7 @@ empty/.style=
 \node[box](dev_query_get)[below of = dev_register, node distance=1.5cm]{Send GET request};
 \node[empty](dir_get_guide)[left of = dev_query_get, node distance=5cm]{};
 \node[box](dir_query_get)[below of = dir_get_guide, node distance=7.5mm]{Look up\\machines};
-\node[box](dev_query_receive)[below of = dev_query_get, node distance=1.5cm]{Record machines from\\GET request};
+\node[box](dev_query_receive)[below of = dev_query_get, node distance=1.5cm]{Store machines from\\GET request};
 
 \draw[densely dotted] (dir) -- (dir_register);
 \draw[densely dotted] (dev) -- (init_dev);
@@ -412,7 +444,7 @@ empty/.style=
 \end{center}
 
 Device A stores machine \( y \)'s IP address and public key when the task is received, because device A turns on before B. Because the directory server is only queried by the Nihilo runtime when the device boots, device A has no knowledge of device B or machine \( y \) until it receives the first packet. Device B does not do the same when it receives its message because it already knows about machine \( x \).
-
+\subsection{Nihilo API}
 \subsubsection{Nihilo API Macros}
 
 \textbf{\texttt{NIH\_VOID(NAME, PARAMNAME)}}\newline
