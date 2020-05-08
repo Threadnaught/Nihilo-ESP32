@@ -9,11 +9,19 @@
 \usepackage{tikz}
 \usetikzlibrary{positioning}
 \usepackage{fancyhdr}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
 
 \renewcommand{\headrulewidth}{0pt}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[C]{\textcolor{red}{ROUGH DRAFT, PRE-SPELLCHECK}}
+\fancyhead[C]{\textcolor{red}{ROUGH DRAFT}}
 \rfoot{\thepage}
 
 \begin{document}
@@ -36,13 +44,29 @@ Because implementing an entire platform of this scale is outside of the scope of
 Concessions have been made to simplicity to allow for experimentation, meaning that no guarantees can be made about security or speed.
 The project aims, however, to be well tested and stable.
 
+There are a great number of potential applications of this project, anywhere where microcontrollers must communicate with each other. For example, the IoT (Internet of Things) industry has become notorious for hiring programmers without a security background, who then include trivially exploitable vulnerabilities in code and configuration files\cite{internetofsh}. By taking the most difficult and error prone parts of designing for IoT, and hiding them behind an abstraction layer which removes the opportunity for dangerous creativity, greater security can be achieved while also reducing developer workload.
+
 \pagebreak
 \section{Literature Review}
-\subsubsection{Execution}
+\subsection{Similar Projects}
+\subsubsection{MQTT}
+MQTT is a versatile TCP-based application layer protocol, designed for compatibility with small network-capable devices including microcontrollers. MQTT is built on brokers and clients. Brokers are similar to servers in a standard client-server architecture, with the difference that they can wait very long periods of time after a subscription to send the client a message. In order to express interest in a certain type of message, a client subscribes to it by sending a request to a broker. Whenever the broker receives a message of that type, it informs the subscribed client. Multiple subscribers can receive messages from a single publisher, and multiple publishers can send messages to a single subscriber.
 
+The split between small, low-footprint clients, which might not even have persistent data storage and large, fixed brokers enables MQTT to exploit the advantages of both. The clients do not need to directly communicate with each other so they only need to switch on networking periodically, and most of the complicated message and error handling logic can be contained within the broker. This method of messaging is inherently asynchronous - replies have not been built into the protocol, and if desired must be implemented by the user. The retain flag can make MQTT even more asynchronous. In this mode, the broker can hold on to a message for a period of time, so that it is sent the next time the broker is able to communicate with a subscriber to that message type. 
 
-\subsubsection{Storage}
-\subsubsection{Communication}
+MQTT has widespread adoption mainly in IoT, but its almost unique abilities for asynchronous messaging over periods of hours or days gives it niche uses away from fast, reliable network infrastructure. It has applications in dial-up where messages are bundled and sent all at once over a phone line for cost reasons, and satellite communication where messages can only be sent when there is line of sight to the satellite.
+
+While MQTT is useful in many applications, it does have downsides. From the beginning it was built around a desire for maximum compatibility, and so there are many desirable features which are not included. The first of these is encryption, and while it can be implemented by the user, both approaches to doing so have their own problems:
+\begin{itemize}
+\item MQTT can be directed through TLS (Transport Layer Security) before running through TCP. Although TLS is very secure, has a large overhead due to being RSA-based. TLS is not end-to-end encryption, so the server will see the message's content (the payload).
+\item The payload can be encrypted using a user-designed encryption scheme. While this would be end-to-end encrypted, the message type and all other information other than the payload would again be visible to an attacker. Non-experts are also generally discouraged from designing encryption schemes, because guaranteeing security is difficult.
+\end{itemize}
+
+The most serious problem with boeitherth of these solutions, however, is that they are non-standard and therefore products are likely to be developed which do not use them. Good encryption schemes should be pervasive and non-optional. The reliance on a central broker is another drawback of this protocol; while it is necessary to make MQTT fit on the smaller microcontrollers, it is not for larger ones.
+
+\subsubsection{CouchDB}
+\subsubsection{IoT-DSA????}
+\subsection{Theoretical Basis}
 
 \section{Methodology}
 \subsection{High-level Requirements}
@@ -61,9 +85,9 @@ A good solution to this project should allow a user to:
 \end{itemize}
 \item Communicate between devices. This communication should be:
 \begin{itemize}
-  \item Fast
-  \item Reliable
-  \item Secure
+  \item Low-latency, sending a message and receiving a reply should be quick
+  \item Reliable, messages should be received reliably, and when they are not, the error should be handled gracefully
+  \item Secure, the content of a message should not be visible to an attacker
 \end{itemize}
 \end{itemize}
 \subsection{Technologies used}
@@ -584,6 +608,8 @@ Internal function, assisting with passing the parameter from the runtime to WASM
 
 \section{References}
 \begin{thebibliography}{9}
+\bibitem{internetofsh}
+  \url{https://www.zdnet.com/article/smart-iot-home-hubs-vulnerable-to-remote-code-execution-attacks/}
 \bibitem{32datasheet}
 	\url{https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf}
 \bibitem{lx6datasheet}
