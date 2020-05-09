@@ -160,15 +160,18 @@ Similar to how the ESP32's functionality is packaged into modules to make integr
 \node (boot)at(2.25,1){};
 \node (regulator)at(1.6,2.3){};
 \node (uart)at(2.65, 1.4){};
+\node (module)at(3, 3.5){};
 \node[left of = boot, node distance=3.5cm] (boot_label) {Bootloader button};
 \node[left of = restart, node distance=3.5cm] (restart_label) {Restart button};
 \node[left of = regulator, node distance=3.5cm] (regulator_label) {Voltage regulator};
-\node[left of = uart, node distance=5cm] (uart_label) {USB to UART bridge};
+\node[left of = uart, node distance=5cm] (uart_label) {USB to UART chip};
+\node[left of = module, node distance=3.5cm] (module_label) {ESP32-WROOM-32D};
 
 \draw[->, orange, ultra thick] (boot_label) -- (boot);
 \draw[->, orange, ultra thick] (restart_label) -- (restart);
 \draw[->, orange, ultra thick] (regulator_label) -- (regulator);
 \draw[->, orange, ultra thick] (uart_label) -- (uart);
+\draw[->, orange, ultra thick] (module_label) -- (module);
 \end{tikzpicture}
 \end{center}
 
