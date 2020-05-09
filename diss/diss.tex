@@ -88,6 +88,10 @@ Although DSA has many interesting concepts, it suffers most from a lack of clear
 
 Nonetheless, DSA does work in low-demand environments like as in an IoT home automation hub, which is its primary purpose.
 
+\subsubsection{Node.js}
+
+\textcolor{red}{TODO}
+
 \section{Methodology}
 \subsection{High-level Requirements}
 These requirements are defined in terms of two key words, \textbf{must} and \textbf{should}. \textbf{Must} is used for qualitative requirements, which are either met or not. \textbf{Should} is used for quantitive requirements, whose criterea will be specified prior to testing.
@@ -221,7 +225,7 @@ Although wasm3 is less professionally implemented, it has excellent support for 
 Its simplicity also aids in modifications and experiments. 
 \end{itemize}
 
-Wasm3 was chosen for this project.
+Wasm3 was chosen for this project. Prior to running WebAssembly using wasm3, it must be generated. In order to keep the project as a single programming language, C++ was chosen as the source language to compile WebAssembly from.
 
 \subsection{System Design}
 \subsubsection{Machines}
@@ -296,10 +300,11 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 \subsection{Implementation}
 \subsubsection{Tooling}
 
-There are two major pieces of tooling that were required to implement Nihilo;
+There are three major pieces of tooling that were required to implement Nihilo;
 \begin{itemize}
 \item A pass-through WiFi access point, to streamline network access for the ESP32s
 \item A directory server, to facilitate discovery of peers
+\item The compiler, programmer, and associated toolchains
 \end{itemize}
 
 Allowing for a simple connection to private resources is a common problem in developing open-source software. WiFi credentials, API keys and bitcoin addresses are often left in code which is pushed into public repositories. In order to develop without adding support for Eduroam, and exposing university login details in the code, create\_ap \cite{createap}  was used. This turns WiFi-enabled linux computers into repeaters, taking in one WiFi network while creating another with dependable, specified parameters that can be developed against.
@@ -307,6 +312,10 @@ Allowing for a simple connection to private resources is a common problem in dev
 The other component was an HTTP-based directory server, implemented in python. This is simply a public list of known machines, registered using POST requests, and retrieved using GET requests. To simplify handling, the server will only send back machines belonging to other devices. 
 
 On boot, the Nihilo runtime registers owned machines to this service, and queries it for those belonging to other devices. If the runtime decodes a packet from an unknown machine, it will add that to the list.
+
+Wasic++, a clang-based C++ to WebAssembly compiler was used to create the code which the machines can run. This is then run through wasm-opt, which reduces the webassembly's size. Finally, it is run through xxd, which converts the bytes of the optimized wasm into a header file that can be compiled into the runtime. On boot, the runtime writes this into the ESP32's SPIFFS as a .wasm file.
+
+Makefiles were used to unify the different build systems and tools (ESP-IDF uses both ninja and cmake). A single command in the src directory can compile the machine's code into a header file using wasic++, compile the runtime into an xtensa ESP32 executable, program the device, and then execute the program printing any logs to the screen. Makefiles use file modification time to only compile files that have changed, so this process usually completes quickly.
 
 \subsubsection{Adding a simple heap to wasm3}
 
