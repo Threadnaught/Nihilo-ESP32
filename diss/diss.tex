@@ -90,25 +90,31 @@ Nonetheless, DSA does work in low-demand environments like as in a IoT home auto
 
 \section{Methodology}
 \subsection{High-level Requirements}
-A good solution to this project should allow a user to:
+These requirements are defined in terms of two key words, \textbf{must} and \textbf{should}. \textbf{Must} is used for qualitative requirements, which are either met or not. \textbf{Should} is used for quantitive requirements, whose criterea will be specified prior to testing.
+
+A good solution to this project will:
 \begin{itemize}
-\item Compile code on their computer, and then execute it on their ESP-32. Preferably, this code should be:
+\item Compile code on their computer, and then execute it on their ESP-32. This code:
 \begin{itemize}
-  \item Portable to multiple devices
-  \item Efficient to run in terms of memory and time
-  \item Supported by mature compilers
+  \item \textbf{Must} be portable to multiple devices
+  \item \textbf{Must} suport mature languages, compilers and tooling
+  \item \textbf{Should} be efficient to run in terms of memory and time
 \end{itemize}
-\item Save data to their device. At a minimum, this capability should:
+\item Save data to their device. This capability:
 \begin{itemize}
-  \item Be able to save data while the device is off
-  \item Be able to structure the saved data
+  \item \textbf{Must} be able to save strings while the device is off
+  \item \textbf{Must} be able to structure the saved data
+  \item \textbf{Should} write the data quickly
+  \item \textbf{Should} read the data quickly
 \end{itemize}
-\item Communicate between devices. This communication should be:
+\item Communicate between devices. This communication:
 \begin{itemize}
-  \item Low-latency, sending a message and receiving a reply should be quick
-  \item Reliable, messages should be received reliably, and when they are not, the error should be handled gracefully
-  \item Secure, the content of a message should not be visible to an attacker
+  \item \textbf{Must} be reliable, ensuring messages are received and causing an error if they are not.
+  \item \textbf{Must} allow the user to call a function on the target device, using a string as a parameter and as the return value
+  \item \textbf{Must} be secure, the content of a message should not be visible to an attacker
+  \item \textbf{Should} be low-latency, sending a message and receiving a reply quickly
 \end{itemize}
+\item Adhere to the general principle that beyond these basic requirements, any eventual implementation will be dependent on factors not yet known at the time the requirements are specified. The project should therefore be designed in a manner that is conducive to experimentation and learning about the nature of the problem.
 \end{itemize}
 \subsection{Technologies used}
 \subsubsection{ESP-32}
