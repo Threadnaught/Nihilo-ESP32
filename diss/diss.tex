@@ -37,7 +37,7 @@ Microcontrollers, on the other hand, tend to be realtime, with primitive network
 As Moore's law slows and the graph of computing power over time begins to flatten, semiconductor manufacturers have created new devices.
 Because waiting for cheaper hardware is no longer a valid \lq optimization' strategy, manufacturers have begun adding microprocessor-like capabilities to microcontrollers.
 Although these new devices are traditionally classified as microcontrollers, their capabilities blur the line between the microcontrollers and microprocessors.
-The \lq super-microcontroller' used in this project was the Espressif systems ESP-32.
+The \lq super-microcontroller' used in this project was the Espressif systems ESP32.
 
 The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution and communication in a simple to use and extensible platform.
 Because implementing an entire platform of this scale is outside of the scope of a single-module dissertation, this project is more a proof-of-concept than a final version.
@@ -62,7 +62,7 @@ While MQTT is useful in many applications, it does have downsides. From the begi
 \item The payload can be encrypted using a user-designed encryption scheme. While this would be end-to-end encrypted, the message type and all other information other than the payload would again be visible to an attacker. Non-experts are also generally discouraged from designing encryption schemes, because guaranteeing security is difficult.
 \end{itemize}
 
-The most serious problem with either of these solutions, however, is that they are non-standard and therefore products are likely to be developed which do not use them. Good encryption schemes should be pervasive and non-optional. The reliance on a central broker is another drawback of this protocol, and becomes unnecessary when developing for a microcontroller as powerful as the ESP-32.
+The most serious problem with either of these solutions, however, is that they are non-standard and therefore products are likely to be developed which do not use them. Good encryption schemes should be pervasive and non-optional. The reliance on a central broker is another drawback of this protocol, and becomes unnecessary when developing for a microcontroller as powerful as the ESP32.
 
 \subsubsection{CouchDB}
 
@@ -74,7 +74,7 @@ CouchDB has an API which is exposed over HTTP on port 5984. The various HTTP ver
 
 CouchDB also has a built-in javascript engine, used to program queries. Instead of sending raw database values to the user, as is usually the case in SQL, a derived value can be calculated, and sent to the user instead. While something like this is possible using SQL views, in practise developers usually forgo it in favour of calculating the derived value in a more familiar language on the application server. This shows the advantage of running code in proximity to the values being queried.
 
-Although CouchDB is an interesting approach to the design requirements at the intersection of JSON and high-performance databases, there are aspects of its design which are not relevant to the ESP-32. The microcontroller has extremely limited flash memory, so storing many JSON documents together in a highly optimized file format is not relevant. Any large data storage requirements would likely be fulfilled by external devices connected over a network. Should Nihilo ever expand beyond microcontrollers, however, CouchDB would be a good example to imitate.
+Although CouchDB is an interesting approach to the design requirements at the intersection of JSON and high-performance databases, there are aspects of its design which are not relevant to the ESP32. The microcontroller has extremely limited flash memory, so storing many JSON documents together in a highly optimized file format is not relevant. Any large data storage requirements would likely be fulfilled by external devices connected over a network. Should Nihilo ever expand beyond microcontrollers, however, CouchDB would be a good example to imitate.
 
 \subsubsection{IoT-DSA}
 
@@ -94,7 +94,7 @@ These requirements are defined in terms of two key words, \textbf{must} and \tex
 
 A good solution to this project will:
 \begin{itemize}
-\item Compile code on their computer, and then execute it on their ESP-32. This code:
+\item Compile code on a computer, and then execute it on an ESP32. This code:
 \begin{itemize}
   \item \textbf{Must} be portable to multiple devices
   \item \textbf{Must} suport mature languages, compilers and tooling
@@ -117,17 +117,17 @@ A good solution to this project will:
 \item Adhere to the general principle that beyond these basic requirements, any eventual implementation will be dependent on factors not yet known at the time the requirements are specified. The project should therefore be designed in a manner that is conducive to experimentation and learning about the nature of the problem.
 \end{itemize}
 \subsection{Technologies used}
-\subsubsection{ESP-32}
+\subsubsection{ESP32}
 
-Released in 2016, the Espressif Systems ESP-32 is a powerful dual-core microcontroller.
+Released in 2016, the Espressif Systems ESP32 is a powerful dual-core microcontroller.
 It is based a Cadence IP core, which is in turn based on the Xtensa instruction set \cite{32datasheet}.
 This instruction set is often used for specialist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
 Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
-A comparison between the ESP-32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
+A comparison between the ESP32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
 \begin{table}[h]
 \begin{tabular}{l|lll}
-						& Arduino Uno		& ESP-32		& Pixel 3a		\\ \hline
+						& Arduino Uno		& ESP32		& Pixel 3a		\\ \hline
 Clock Frequency			& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
 RAM						& 32 KB				& 520 KB		& 4 GB			\\ \hline
 WiFi 					& N 				& \textbf{Y}	& \textbf{Y}	\\ \hline
@@ -143,8 +143,34 @@ IO pins					& \textbf{20/22}	& \textbf{39}	& N/A			\\
 
 \emph{Note: Missing functionality can be added using external electronics}
 
-In addition to the I/O in the above table, the ESP-32 also supports SPI, I\textsuperscript{2}S, I\textsuperscript{2}C, CAN, as well as dedicated hardware for accelerating hashing, encryption, signing, decryption, and cryptographic random number generation.
+In addition to the I/O in the above table, the ESP32 also supports SPI, I\textsuperscript{2}S, I\textsuperscript{2}C, CAN, as well as dedicated hardware for accelerating hashing, encryption, signing, decryption, and cryptographic random number generation.
 The entropy source for the RNG is background noise collected from the RF module.
+
+For convenience, the ESP32 chip is available both on its own, and in pre-assembled modules that can be soldered on to a board. These modules offer a number of advantages over designing a customised solution, as they already include flash storage, a PCB antenna, and most of the support circuitry required to make the ESP32 chip run. Some modules also include external SPI RAM. This circuitry is shielded under a metal can which prevents RF (Radio Frequency) interference from the ESP32 from exiting the module. These modules have already been approved by regulators, including the FCC (United States) and CE (Europe). Because a large cost in creating a new device is getting RF regulatory approval, these modules can make developing new devices easier.
+
+The ESP32 module used in this project is the
+ESP32-WROOM-32D, containing 4MB of flash memory. This module alone, however, is insufficient as a development tool because it lacks a programming interface. In normal operation the ESP32 boots with GPIO0 (General Purpose Input/Output Pin 0) held high (+3.3 V), but to enter bootloader mode GPIO0 must be held low (0V). This allows the ESP32 to receive a program over UART (Universal Asynchronous Receive/Transmit). UART is an industry standard embedded serial connection, sending data one bit at a time over a bidirectonal protocol. Once the ESP32 is in bootloader mode, a python program called \texttt{esptool.py} allows a developer to send compiled code to the device.
+
+Similar to how the ESP32's functionality is packaged into modules to make integrating it easier, the modules are then attached to boards to make programming them easier. These boards typically have buttons to restart and enable bootloader mode, a USB to UART chip which enables programming the device over USB, and a voltage regulator which converts the 5 volt USB power into the 3.3 volt power which the chip requires.
+
+\begin{center}
+\begin{tikzpicture}
+\node[anchor=south west] at(0,0) {\includegraphics{luanode.png}};
+\node (restart)at(0.85,1.85) {};
+\node (boot)at(2.25,1){};
+\node (regulator)at(1.6,2.3){};
+\node (uart)at(2.65, 1.4){};
+\node[left of = boot, node distance=3.5cm] (boot_label) {Bootloader button};
+\node[left of = restart, node distance=3.5cm] (restart_label) {Restart button};
+\node[left of = regulator, node distance=3.5cm] (regulator_label) {Voltage regulator};
+\node[left of = uart, node distance=5cm] (uart_label) {USB to UART bridge};
+
+\draw[->, orange, ultra thick] (boot_label) -- (boot);
+\draw[->, orange, ultra thick] (restart_label) -- (restart);
+\draw[->, orange, ultra thick] (regulator_label) -- (regulator);
+\draw[->, orange, ultra thick] (uart_label) -- (uart);
+\end{tikzpicture}
+\end{center}
 
 The ESP-IDF (IoT Development Framework) is a library provided by Espressif systems. It integrates into and extends the dedicated hardware provided by the processor.
 For example, Writing code against the WiFi transceiver requires using the IDF's TCP, UDP, or HTTP library.
@@ -164,7 +190,7 @@ The cJson package is included in IDF, and was used for all storage in this proje
 
 \subsubsection{WebAssembly/wasm3}
 
-Although the target of this project is the ESP-32, the goal is for it to be architecture agnostic.
+Although the target of this project is the ESP32, the goal is for it to be architecture agnostic.
 This includes both running on different instruction sets and running on different types of computer including desktops and servers.
 The problem of targeting different types of device using the same standard is similar to the problem websites were made to solve.
 The environment of the web adds the bonus that browser-based runtimes are sandboxed and have been aggressively tested for vulnerabilities.
@@ -209,7 +235,7 @@ For security purposes, machines are sandboxed from each other, but have absolute
 \item The message can be read only by the stated destination.
 \end{itemize}
 
-RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of its keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP-32 takes in excess of 20 seconds.
+RSA (Rivest–Shamir–Adleman)\cite{rsa}, the industry standard algorithm for asymmetric cryptography, was initially considered for this task. Although RSA is very secure, developing for the microcontroller platform exposes a set of issues with RSA which are usually hidden by the power of modern computers. The first of these problems is that key generation (keygen) is profoundly computationally intensive. RSA's hardness assumption is a stronger version of its keygen process; both involving the factorisation of very large numbers. RSA keygen on the ESP32 takes in excess of 20 seconds.
 
 ECC \cite{ecc}(Elliptic Curve Cryptography) is a set of cryptographic primitives based on modular elliptic curves. ECC was built into an asymmetric cryptosystem called ECDH (Elliptic Curve Diffie-Hellman), which is far more computationally efficient than RSA. It has a number of advantages over RSA;
 \begin{itemize}
@@ -269,7 +295,7 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 
 There are two major pieces of tooling that were required to implement Nihilo;
 \begin{itemize}
-\item A pass-through WiFi access point, to streamline network access for the ESP-32s
+\item A pass-through WiFi access point, to streamline network access for the ESP32s
 \item A directory server, to facilitate discovery of peers
 \end{itemize}
 
@@ -291,7 +317,7 @@ It was decided, as a consequence of the small memory footprint of each function,
 
 \subsubsection{Task queue and communication}
 
-One problem encountered early on in the development of Nihilo was the limited RAM of the ESP-32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP-32, requiring these would break compatibility with most off-the-shelf ESP-32 modules.
+One problem encountered early on in the development of Nihilo was the limited RAM of the ESP32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP32, requiring these would break compatibility with most off-the-shelf ESP32 modules.
 
 The solution is to use a FIFO (first in, first out) task queue. This allows WASM function calls to be placed onto the queue as tasks and executed one by one. These tasks may optionally also specify callbacks, placing new tasks onto the queue once execution is complete. Two machines can have an asynchronous 'dialogue' through callbacks without ever loading more than one of them at a time. This model can also be extended to communication if the queue also contains calls to machines on other devices, in which the execution is replaced with encrypting and sending the call.
 
