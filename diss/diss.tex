@@ -50,7 +50,7 @@ There are a great number of potential applications of this project, anywhere whe
 \section{Literature Review}
 \subsection{Similar Projects}
 \subsubsection{MQTT}
-MQTT is a versatile TCP-based application layer protocol, designed for compatibility with small network-capable devices including microcontrollers. MQTT is built on brokers and clients. Brokers are similar to servers in a standard client-server architecture, with the difference that they can wait very long periods of time after a subscription to send the client a message. In order to express interest in a certain type of message, a client subscribes to it by sending a request to a broker. Whenever the broker receives a message of that type, it informs the subscribed client. Multiple subscribers can receive messages from a single publisher, and multiple publishers can send messages to a single subscriber.
+MQTT (Message Queuing Telemetry Transport) is a versatile TCP-based application layer protocol, designed for compatibility with small network-capable devices including microcontrollers. MQTT is built on brokers and clients. Brokers are similar to servers in a standard client-server architecture, with the difference that they can wait very long periods of time after a subscription to send the client a message. In order to express interest in a certain type of message, a client subscribes to it by sending a request to a broker. Whenever the broker receives a message of that type, it informs the subscribed client. Multiple subscribers can receive messages from a single publisher, and multiple publishers can send messages to a single subscriber.
 
 The split between small, low-footprint clients, which might not even have persistent data storage and large, fixed brokers enables MQTT to exploit the advantages of both. The clients do not need to directly communicate with each other so they only need to switch on networking periodically, and most of the complicated message and error handling logic can be contained within the broker. This method of messaging is inherently asynchronous - replies have not been built into the protocol, and if desired must be implemented by the user. The retain flag can make MQTT even more asynchronous. In this mode, the broker can hold on to a message for a period of time, so that it is sent the next time the broker is able to communicate with a subscriber to that message type. 
 
@@ -62,10 +62,25 @@ While MQTT is useful in many applications, it does have downsides. From the begi
 \item The payload can be encrypted using a user-designed encryption scheme. While this would be end-to-end encrypted, the message type and all other information other than the payload would again be visible to an attacker. Non-experts are also generally discouraged from designing encryption schemes, because guaranteeing security is difficult.
 \end{itemize}
 
-The most serious problem with boeitherth of these solutions, however, is that they are non-standard and therefore products are likely to be developed which do not use them. Good encryption schemes should be pervasive and non-optional. The reliance on a central broker is another drawback of this protocol; while it is necessary to make MQTT fit on the smaller microcontrollers, it is not for larger ones.
+The most serious problem with either of these solutions, however, is that they are non-standard and therefore products are likely to be developed which do not use them. Good encryption schemes should be pervasive and non-optional. The reliance on a central broker is another drawback of this protocol, and becomes unnecessary when developing for a microcontroller as powerful as the ESP-32.
 
 \subsubsection{CouchDB}
-\subsubsection{IoT-DSA????}
+
+Couch DB is a document-oriented database. This means that instead of storing rigid rows and columns of data as in an SQL (Structured Query Language) database it stores data as files, JSON files in this case. JSON (JavaScript Object Notation) is a format that hierarchically structures data in the form of numbers, strings and booleans into objects and arrays. JSON was originally developed as a serialization format for messages going between websites and servers, but has found use in storing configuration files, metadata, and in this case databases.
+
+The ability to store hierarchical data earns CouchDB the designation of NoSQL (Non SQL). Because SQL essentially represents rows as tuples, fixed length arrays where the datatype of each index is pre-assigned, it cannot handle variable-length data within a single row. In order to circumvent this problem, SQL makes heavy use of row IDs to link records together, which must be queried using complex SQL which can take significant development time. While CouchDB does still support links between documents, there is less need for them because they tend to represent data in a way which is already closer to how it is structured in code.
+
+CouchDB has an API which is exposed over HTTP on port 5984. The various HTTP verbs, like GET, PUT, DELETE and POST are exposed as normal, but with special meanings in the context of a document-oriented database. For example, the verb PUT allows a user to create a new database if run against http://IP\_ADDRESS:5984/DATABASE\_NAME. Databases can be deleted, new documents inserted, and metadata retrieved in a similar fashion. This method, of using HTTP to expose capabilities over a network is useful. It allows the developer of the database to use pre-existing and well engineered tools like curl for developement. It is also likely that any prospective user will already have a good conceptual model of the protocol involved.
+
+CouchDB also has a built-in javascript engine, used to program queries. Instead of sending raw database values to the user, as is usually the case in SQL, a derived value can be calculated, and sent to the user instead. While something like this is possible using SQL views, in practise developers usually forgo it in favour of calculating the derived value in a more familiar language on the application server. This shows the advantage of running code in proximity to the values being queried.
+
+Although CouchDB is an interesting approach to the design requirements at the intersection of JSON and high-performance databases, there are aspects of its design which are not relevant to the ESP-32. The microcontroller has extremely limited flash memory, so storing many JSON documents together in a highly optimized file format is not relevant. Any large data storage requirements would likely be fulfilled by external devices connected over a network. Should Nihilo ever expand beyond microcontrollers, however, CouchDB would be a good example to imitate.
+
+\subsubsection{IoT-DSA}
+
+
+
+
 \subsection{Theoretical Basis}
 
 \section{Methodology}
@@ -632,5 +647,7 @@ Internal function, assisting with passing the parameter from the runtime to WASM
 	\url{https://www.math.ust.hk/~mabfchen/Math391I/Pigeonhole.pdf}
 \bibitem{weberror}
   \url{https://owasp.org/www-community/Improper_Error_Handling}
+\bibitem{dsa}
+  \url{http://iot-dsa.org/get-started/how-dsa-works}
 \end{thebibliography}
 \end{document}
