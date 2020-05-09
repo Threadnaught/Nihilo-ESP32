@@ -56,9 +56,9 @@ The split between small, low-footprint clients, which might not even have persis
 
 MQTT has widespread adoption mainly in IoT, but its almost unique abilities for asynchronous messaging over periods of hours or days gives it niche uses away from fast, reliable network infrastructure. It has applications in dial-up where messages are bundled and sent all at once over a phone line for cost reasons, and satellite communication where messages can only be sent when there is line of sight to the satellite.
 
-While MQTT is useful in many applications, it does have downsides. From the beginning it was built around a desire for maximum compatibility, and so there are many desirable features which are not included. The first of these is encryption, and while it can be implemented by the user, both approaches to doing so have their own problems:
+While MQTT is useful in many applications, it does have downsides. From the beginning it was built around a desire for maximum compatibility, and so there are many useful features which are not included. The first of these is encryption, and while it can be implemented by the user, both approaches to doing so have their own problems:
 \begin{itemize}
-\item MQTT can be directed through TLS (Transport Layer Security) before running through TCP. Although TLS is very secure, has a large overhead due to being RSA-based. TLS is not end-to-end encryption, so the server will see the message's content (the payload).
+\item MQTT can be directed through TLS (Transport Layer Security) before running through TCP. Although TLS is very secure, it has a large overhead due to being RSA-based. TLS is not end-to-end encryption, so the server will see the message's content (the payload).
 \item The payload can be encrypted using a user-designed encryption scheme. While this would be end-to-end encrypted, the message type and all other information other than the payload would again be visible to an attacker. Non-experts are also generally discouraged from designing encryption schemes, because guaranteeing security is difficult.
 \end{itemize}
 
@@ -78,10 +78,15 @@ Although CouchDB is an interesting approach to the design requirements at the in
 
 \subsubsection{IoT-DSA}
 
+IoT-DSA (Distributed Services Architecture) is a relativley immature set of protocols and libraries,  designed to transform sets of devices into a single continuous system. The DSA website goes as far as claiming that this process will one day result in ``a fully connected world in which all objects are interoperable with one another regardless of manufacturer, specific device characteristics or functionality" \cite{dsa}. However realistic the vision of bringing competing manufacturers with diverging material interests eachother into alignment is, the DSA community have created a unique project as a consequence of that vision.
 
+DSA's Link-Broker architecture is topologically similar to MQTT's Client-Broker architecture. It is based on HTTP and WebSockets, rather than TCP, and allows more fine-grained control over how a message is received. DSA allows a client (called a DSLink) to publish a Node, which is a variable that has a single value at any point in time. Like MQTT, other links can subscribe to the node and be updated when its value changes. In MQTT, clients have no control over messages after they have been sent but in DSA, the link has more control over the node and can see if anyone has subscribed to it. DSA also allows for the persistent storage of these values, as a JSON file. This method of data persistence, where the values are saved to a single JSON file on disk, is much closer to how small, embedded devices need to store data than CouchDB.
 
+Another point of difference between MQTT and DSA is that DSA has a greater focus on communication between brokers. Normally, brokers behave in the same way as they do in MQTT, forwarding nodes from one link to another, but nodes can also be forwarded from broker to broker to reach any link in the network. The use case of this, however, is unclear as any internet connected device should be visible to any broker, without needing forwarding. Either a client can directly contact a broker, or there is no path from the client to that broker. The only exception to this would be to accelerate the Domain-Specific Query Language, which allows a client to define a query to run on a link (as in CouchDB), and then distribute it over the various brokers to be run more quickly.
 
-\subsection{Theoretical Basis}
+Although DSA has many interesting concepts, it suffers most from a lack of clear design parameters and a desire to make everything capable of doing anything. DSA has all of the same drawbacks as MQTT, such as lack of encryption and dependence on brokers, but for different reasons. They exist in MQTT because of a lack of physical resources on the device, but they exist in DSA because of a lack of systems thinking in the high level design of the platform. The desire to create a unified, simple protocol which can communicate with web browsers as it can with microcontrollers leads to a solution that does neither well. The desire to homogenize the brokers together into a single system leads to scaling issues when many devices are each running queries on many nodes. 
+
+Nonetheless, DSA does work in low-demand environments like as in a IoT home automation hub, which is its primary purpose.
 
 \section{Methodology}
 \subsection{High-level Requirements}
