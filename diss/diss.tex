@@ -51,7 +51,7 @@ There are a great number of potential applications of this project, anywhere whe
 \section{Literature Review}
 \subsection{Similar Projects}
 \subsubsection{MQTT}
-MQTT (Message Queuing Telemetry Transport) is a versatile TCP-based application layer protocol, designed for compatibility with small network-capable devices including microcontrollers. MQTT is built on brokers and clients. Brokers are similar to servers in a standard client-server architecture, with the difference that they can wait very long periods of time after a subscription to send the client a message. In order to express interest in a certain type of message, a client subscribes to it by sending a request to a broker. Whenever the broker receives a message of that type, it informs the subscribed client. Multiple subscribers can receive messages from a single publisher, and multiple publishers can send messages to a single subscriber.
+MQTT (Message Queuing Telemetry Transport) is a versatile TCP (Transmission Control Protocol) based application layer protocol, designed for compatibility with small network-capable devices including microcontrollers. MQTT is built on brokers and clients. Brokers are similar to servers in a standard client-server architecture, with the difference that they can wait very long periods of time after a subscription to send the client a message. In order to express interest in a certain type of message, a client subscribes to it by sending a request to a broker. Whenever the broker receives a message of that type, it informs the subscribed client. Multiple subscribers can receive messages from a single publisher, and multiple publishers can send messages to a single subscriber.
 
 The split between small, low-footprint clients, which might not even have persistent data storage and large, fixed brokers enables MQTT to exploit the advantages of both. The clients do not need to directly communicate with each other so they only need to switch on networking periodically, and most of the complicated message and error handling logic can be contained within the broker. This method of messaging is inherently asynchronous - replies have not been built into the protocol, and if desired must be implemented by the user. The retain flag can make MQTT even more asynchronous. In this mode, the broker can hold on to a message for a period of time, so that it is sent the next time the broker is able to communicate with a subscriber to that message type. 
 
@@ -116,16 +116,17 @@ A good solution to this project will:
 \begin{enumerate}
   \item \textbf{Must} be able to save strings while the device is off
   \item \textbf{Must} be able to structure the saved data
-  \item \textbf{Should} write the data quickly
-  \item \textbf{Should} read the data quickly
+  \item \textbf{Should} write data quickly
+  \item \textbf{Should} read data quickly
+  \item \textbf{Should} retain data accurately
 \end{enumerate}
 \item Communicate between devices. This communication:
 \begin{enumerate}
   \item \textbf{Must} be reliable, ensuring messages are received and causing an error if they are not.
   \item \textbf{Must} allow the user to call a function on the target device, using a string as a parameter and as the return value
   \item \textbf{Must} be secure, the content of a message should not be visible to an attacker
+  \item \textbf{Must} be stable over long periods of time
   \item \textbf{Should} be low-latency, sending a message and receiving a reply quickly
-  \item \textbf{Should} be stable over long periods of time
 \end{enumerate}
 \item Adhere to the general principle that beyond these basic requirements, any eventual implementation will be dependent on factors not yet known at the time the requirements are specified. The project should therefore be designed in a manner that is conducive to experimentation and learning about the nature of the problem.
 \end{itemize}
@@ -322,7 +323,7 @@ On boot, the Nihilo runtime registers owned machines to this service, and querie
 
 Wasic++, a clang-based C++ to WebAssembly compiler was used to create the code which the machines can run. This is then run through wasm-opt, which reduces the webassembly's size. Finally, it is run through xxd, which converts the bytes of the optimized wasm into a header file that can be compiled into the runtime. On boot, the runtime writes this into the ESP32's SPIFFS as a .wasm file.
 
-Makefiles were used to unify the different build systems and tools (ESP-IDF uses both ninja and cmake). A single command in the src directory can compile the machine's code into a header file using wasic++, compile the runtime into an xtensa ESP32 executable, program the device, and then execute the program printing any logs to the screen. Makefiles use file modification time to only compile files that have changed, so this process usually completes quickly.
+Makefiles were used to unify the different build systems and tools (ESP-IDF uses both ninja and cmake). A single command in the src directory can compile the machine's code into a header file using wasic++, compile the runtime into an xtensa ESP32 executable, program the device, and then execute the program printing any logs to the screen. Makefiles use file modification time to only compile files that have changed, so this process usually completes quickly. Using the `reflash' and `remonitor' commands, as opposed to the `flash' and `monitor' commands, the whole flash memory, including the wasm code and machine data can be wiped.
 
 \subsubsection{Adding a simple heap to wasm3}
 
@@ -368,7 +369,7 @@ Device A has master machine \( x \), with the following code;
 NIH_VOID(entry, param){}
 NIH_CHARS(RPC, param){
   //write "hello, world" into M.N in persistent JSON
-  readString("M.N", "hello, world");
+  writeString("M.N", "hello, world");
   //read value back out of JSON
   char* ret;
   readString("M.N", &ret);
@@ -542,6 +543,7 @@ empty/.style=
 
 Device A stores machine \( y \)'s IP address and public key when the task is received, because device A turns on before B. Because the directory server is only queried by the Nihilo runtime when the device boots, device A has no knowledge of device B or machine \( y \) until it receives the first packet. Device B does not do the same when it receives its message because it already knows about machine \( x \).
 \subsection{Nihilo API}
+The Nihilo API, contained in \texttt{include/api.h}, is the means though which user code interacts with the runtime.
 \subsubsection{Nihilo API Macros}
 
 \textbf{\texttt{NIH\_VOID(NAME, PARAMNAME)}}\newline
@@ -661,7 +663,7 @@ response
 \end{tcolorbox}
 
 \textbf{\texttt{uint64\_t uptime()}}\newline
-Returns the number of milliseconds since the system booted.
+Returns the number of microseconds since the system booted.
 
 \begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
@@ -709,7 +711,7 @@ In section 5.1, the high-level requirements are listed. There are two types of r
 \subsection{Execution}
 \begin{enumerate}
 \item \textbf{Must} suport mature languages, compilers and tooling. This is a fact of the design of Nihilo, and so does not need to be tested.
-\item \textbf{Should} execute tasks quickly. It should take under 5 milliseconds (ms) to create an execution context, execute a function, clean up the memory, and then move on to the next task. It will be calculated by taking the time between the start and end logs of the following code, averaging over 10 runs, and dividing by 100:
+\item \textbf{Should} execute tasks quickly. It should take under 5 milliseconds (ms) to create an execution context, execute a function, clean up the memory, and then move on to the next task. It was be calculated by taking the time between the start and end logs of the following code, averaging over 10 runs, and dividing by 100:
 \begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(test, param){
@@ -729,7 +731,7 @@ The results are as follows:
 \begin{table}[H]
 \begin{tabular}{|l|l|l|l|}
 \hline
-Start Time(ms)		&End Time(ms)		&100 Task Time(ms)		&Single Task Time(ms)		\\ \hline
+Start Time(ms)		&End Time(ms)		&100 Tasks Time(ms)		&Single Task Time(ms)		\\ \hline
 2137							&2537						&400    							&4\\ \hline
 2627							&3057						&430	    						&4.3\\ \hline
 5657							&6067						&410		    					&4.1\\ \hline
@@ -743,15 +745,111 @@ Start Time(ms)		&End Time(ms)		&100 Task Time(ms)		&Single Task Time(ms)		\\ \hl
 \end{table}
 \emph{Note:the fact that the 100 task time is always a multiple of 10ms appears to come from periodic buffering in the ESP32's logging system. While this likely affects the results, it is insignificant compared to even the smallest result, \( \pm\)2.5\%.}
 
-The average of the single task times is 4.13 ms, beating the minimum requirement by almost 20\%.
+The average single task time is 4.13 ms.
 
 \end{enumerate}
 \subsection{Storage}
 \begin{enumerate}
-\item \textbf{Must} be able to save strings while the device is off. This is proven as a part of tests 3 and 4.
+\item \textbf{Must} be able to save strings while the device is off. This is proven as a part of tests 3, 4 and 5.
 \item \textbf{Must} be able to structure the saved data. This does not need to be tested, as the structure of the saved data is an implicit part of the design.
-\item \textbf{Should} write the data quickly.
-\item \textbf{Should} read the data quickly.
+\item \textbf{Should} write data quickly. It should take under 5 ms to write a short string to its persistent store. It was calculated in the same way as the execution data, using the following code, which writes ``Hello, world" into JSON keys ``0", ``1", ``2" ... ``99".
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(entry, param){
+  logStr("started");
+  for(int i = 0; i < 100; i++)
+    writeString(decstr(i), "Hello, World");
+  logStr("finished");
+}
+\end{verbatim}
+\end{tcolorbox}
+
+The results are as follows:
+\begin{table}[H]
+\begin{tabular}{|l|l|l|l|}
+\hline
+Start Time(ms)		&End Time(ms)				&100 Writes Time(ms)		&Single Write Time(ms)		\\ \hline
+2887	 & 5137	 & 2250	 & 2.25\\ \hline
+2137	 & 4377	 & 2240	 & 2.24\\ \hline
+2137	 & 4397	 & 2260	 & 2.26\\ \hline
+15117	 & 17367	 & 2250	 & 2.25\\ \hline
+6827	 & 9067	 & 2240	 & 2.24\\ \hline
+2147	 & 4387	 & 2240	 & 2.24\\ \hline
+12137	 & 14377	 & 2240	 & 2.24\\ \hline
+2637	 & 4897	 & 2260	 & 2.26\\ \hline
+2167	 & 4417	 & 2250	 & 2.25\\ \hline
+2857	 & 5117	 & 2260	 & 2.26\\ \hline
+\end{tabular}
+\end{table}
+
+The average single write time is 2.49 ms.
+
+\item \textbf{Should} read data quickly. It should take under 5ms to read a short string from its persistent store. It was calculated by taking the 100 items written to the disk in the pervious test and reading them back out.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(entry, param){
+  logStr("started");
+  char* buf;
+  for(int i = 0; i < 100; i++)
+    readString(decstr(i), &buf);
+  logStr("finished");
+}
+\end{verbatim}
+\end{tcolorbox}
+
+The results are as follows:
+\begin{table}[H]
+\begin{tabular}{|l|l|l|l|}
+\hline
+Start Time(ms)		&End Time(ms)				&100 Reads Time(ms)		&Single Read Time(ms)		\\ \hline
+2697	 & 2777	 & 80	 & 0.08\\ \hline
+4867	 & 4967	 & 100	 & 0.1\\ \hline
+2587	 & 2667	 & 80	 & 0.08\\ \hline
+5797	 & 5877	 & 80	 & 0.08\\ \hline
+5297	 & 5387	 & 90	 & 0.09\\ \hline
+3857	 & 3927	 & 70	 & 0.07\\ \hline
+4797	 & 4887	 & 90	 & 0.09\\ \hline
+2137	 & 2207	 & 70	 & 0.07\\ \hline
+3847	 & 3927	 & 80	 & 0.08\\ \hline
+7297	 & 7377	 & 80	 & 0.08\\ \hline
+\end{tabular}
+\end{table}
+
+The average single read time is 0.082ms.
+
+\item \textbf{Should} retain data accurately. It should be able to read 1000 values out of the persistent store without making any errors. It was tested similarly to the previous step, except checking the output of the read against the known input.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+bool same(const char* a, const char* b){
+  int i;
+  //iterate over two strings
+  for(i = 0; a[i] != 0 && b[i] != 0; i++)
+    //false if different char
+    if (a[i] != b[i]) return false;
+  //false if different length
+  if(a[i] != 0 || b[i] != 0) return false;
+  return true;
+}
+NIH_VOID(entry, param){
+  char* buf;
+  logStr("started");
+  for(int i = 0; i < 100; i++){
+    readString(decstr(i), &buf);
+    if(!same(buf, "Hello, World")){
+      logStr("not same");
+      break;
+    }
+  }
+  logStr("finished");
+}
+\end{verbatim}
+\end{tcolorbox}
+
+This test was repeated 10 times, and did not hit the ``not same" failure condition.
+
 \end{enumerate}
 
 \subsection{Communication}
@@ -761,18 +859,54 @@ The average of the single task times is 4.13 ms, beating the minimum requirement
 string as a parameter and as the return value. This is also an implicit part of the design, which is tested as a part of 4 and 5.
 \item \textbf{Must} be secure, the content of a message should not be visible to
 an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this heading is an assurance that the code was tested and audited thoroughly.
-\item \textbf{Should} be low-latency, sending a message and receiving a reply
-quickly.
-\item \textbf{Should} be stable over long periods of time.
+\item \textbf{Must} be stable over long periods of time. This was tested by leaving device on for 24 hours, then executing the code in test \#5. This was repeated 3 times over 72 hours.
+\item \textbf{Should} be low-latency, sending a message and receiving a reply quickly. The following code was put on two devices, one of which acted as a server and the other, the client. The client queues RPC on the server, and when it executes successfully, the server queues successs("finished") on the client, which is then printed out. This test is repeated 10 times.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_CHARS(RPC, param){
+  return "finished";
+}
+NIH_VOID(entry, param){
+  unsigned char* pubs;
+  if(knownPubs(&pubs, 0, 1) > 0){
+    logStr("started");
+    queue(pubs, "RPC", nullptr, "success", nullptr);
+  }
+}
+NIH_VOID(success, param){
+  logStr(param);
+}
+\end{verbatim}
+\end{tcolorbox}
+
+The results are as follows:
+\begin{table}[H]
+\begin{tabular}{|l|l|l|l|}
+\hline
+Start Time(ms)		&End Time(ms)				&Single Call Time(ms)\\ \hline
+5557	 & 27287	 & 21730\\ \hline
+10767	 & 19627	 & 8860\\ \hline
+11257	 & 20537	 & 9280\\ \hline
+4757	 & 16697	 & 11940\\ \hline
+2047	 & 21717	 & 19670\\ \hline
+2087	 & 11947	 & 9860\\ \hline
+11257	 & 23507	 & 12250\\ \hline
+7787	 & 17367	 & 9580\\ \hline
+5747	 & 14927	 & 9180\\ \hline
+2577	 & 23817	 & 21240\\ \hline
+\end{tabular}
+\end{table}
+
+The average call time is 13359ms.
+
 \end{enumerate}
 
-\section{Analysis and Conclusion}
 
+\section{Analysis and Conclusion}
+The average of the single task time is 4.13 ms, beating the minimum requirement by almost 20\%. The times are also very close to each other, meaning that there is a high degree of certainty about how long preparing to execute a function of constant size will take.
 
 \section{Reflection}
-
-\section{Glossary}
-
 
 \section{References}
 \begin{thebibliography}{9}
