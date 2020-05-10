@@ -10,6 +10,7 @@
 \usetikzlibrary{positioning}
 \usepackage{fancyhdr}
 \usepackage{hyperref}
+\usepackage{float}
 \hypersetup{
     colorlinks,
     citecolor=black,
@@ -40,14 +41,13 @@ Because waiting for cheaper hardware is no longer a valid \lq optimization' stra
 Although these new devices are traditionally classified as microcontrollers, their capabilities blur the line between the microcontrollers and microprocessors.
 The \lq super-microcontroller' used in this project was the Espressif systems ESP32.
 
-The goal of this project is to create the first of a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution and communication in a simple to use and extensible platform.
+The goal of this project, named Nihilo, is to create a runtime with a new set of patterns designed from the ground up for the new hardware; to encapsulate storage, code execution and communication in a simple to use and extensible platform.
 Because implementing an entire platform of this scale is outside of the scope of a single-module dissertation, this project is more a proof-of-concept than a final version.
-Concessions have been made to simplicity to allow for experimentation, meaning that no guarantees can be made about security or speed.
+Concessions have been made to simplicity to allow for experimentation, meaning that only limited guarantees can be made about security or speed.
 The project aims, however, to be well tested and stable.
 
 There are a great number of potential applications of this project, anywhere where microcontrollers must communicate with each other. For example, the IoT (Internet of Things) industry has become notorious for hiring programmers without a security background, who then include trivially exploitable vulnerabilities in code and configuration files\cite{internetofsh}. By taking the most difficult and error prone parts of designing for IoT, and hiding them behind an abstraction layer which removes the opportunity for dangerous creativity, greater security can be achieved while also reducing developer workload.
 
-\pagebreak
 \section{Literature Review}
 \subsection{Similar Projects}
 \subsubsection{MQTT}
@@ -95,11 +95,11 @@ Until the late 2000s, the division of work between the various languages of a we
 
 In the years prior to the release of Node.js, an arms race between the major browser manufacturers known as the browser wars were occuring. Web browsers are designed to be interchangeable, so competing by adding features was of limited value. This left competing by improving performance, and one of the biggest targets for this optimization was the javascript engine. What was originally intended as a minor, non-performance critical language suddenly became of interest to large tech organizations like Microsoft, Mozilla and, in the year before the release of Node.js, Google. Because Google's Chrome browser was partly open source, Chrome's javascript engine (V8) was available as an independent, embeddable component that could be used in any project, and on any operating system that chrome targeted. As will be discussed in the WebAssembly section, this engine is closer to a compiler than an interpreter, translating the javascript into optimized machine code at runtime.
 
-In contrast to the rate at which the client side was advancing, the server side was stagnating. Most web servers at the time functioned synchronously, each individual thread receiving a connection, then handling only that connection until the action has been completed. Because processors move much faster than a network round-trip, much of the time was spent waiting (called blocking) for a reply to be recieved. Multithreading did somewhat mitigate this, but introducing its own problems with thread switching overheads.
+In contrast to the rate at which the client side was advancing, the server side was stagnating. Most web servers at the time functioned synchronously, each individual thread receiving a connection, then handling only that connection until the action has been completed. Because processors move much faster than a network round-trip, much of the time was spent waiting (called blocking) for a reply to be recieved. Multithreading did somewhat mitigate this, but introduced its own problems with thread switching overheads.
 
-The creator of Node.js, Ryan Dahl, created a new system. It was based on two components, a task queue, which held work to be done and a javascript engine, which did the work from the queue. The reason why this approach can be faster is because instead of blocking until a reply has been received, it makes a note of what function to queue when the reply is received and moves on to the next task. This design pattern is known as asynchronous I/O. The reason why Node.js includes javascript on the server side is because many web developers were more comfortable with javascript, being highly optimized and developed, than server side languages like PHP. 
+The creator of Node.js, Ryan Dahl, created a new system. It was based on two components, a task queue, which held work to be done and a javascript engine (V8), which did the work from the queue. The reason why this approach can be faster is because instead of blocking until a reply has been received, it makes a note of what function to queue when the reply is received and moves on to the next task. This design pattern is known as asynchronous I/O. The reason why Node.js includes javascript on the server side is because many web developers were more comfortable with javascript, being highly optimized and developed, than server side languages like PHP. 
 
-In Node.js there is much to emulate, asynchronous I/O is an efficient way to handle communication, and the use of a portable language already familiar to target users made it easy to switch to. It can, however, suffer from its own version of spaghetti code in which a large gap between an asynchronous operation and the functions called when it completes make code longer and hard to read.
+In Node.js there is much to emulate, asynchronous I/O is an efficient way to handle communication, and the use of a portable language already familiar to target users made it easy to switch to. It can, however, suffer from its own version of spaghetti code in which a gap between an asynchronous operation and the functions called when it completes make code longer and hard to read.
 
 \section{Methodology}
 \subsection{High-level Requirements}
@@ -108,25 +108,25 @@ These requirements are defined in terms of two key words, \textbf{must} and \tex
 A good solution to this project will:
 \begin{itemize}
 \item Compile code on a computer, and then execute it on an ESP32. This code:
-\begin{itemize}
-  \item \textbf{Must} be portable to multiple devices
+\begin{enumerate}
   \item \textbf{Must} suport mature languages, compilers and tooling
-  \item \textbf{Should} be efficient to run in terms of memory and time
-\end{itemize}
+  \item \textbf{Should} execute tasks quickly.
+\end{enumerate}
 \item Save data to their device. This capability:
-\begin{itemize}
+\begin{enumerate}
   \item \textbf{Must} be able to save strings while the device is off
   \item \textbf{Must} be able to structure the saved data
   \item \textbf{Should} write the data quickly
   \item \textbf{Should} read the data quickly
-\end{itemize}
+\end{enumerate}
 \item Communicate between devices. This communication:
-\begin{itemize}
+\begin{enumerate}
   \item \textbf{Must} be reliable, ensuring messages are received and causing an error if they are not.
   \item \textbf{Must} allow the user to call a function on the target device, using a string as a parameter and as the return value
   \item \textbf{Must} be secure, the content of a message should not be visible to an attacker
   \item \textbf{Should} be low-latency, sending a message and receiving a reply quickly
-\end{itemize}
+  \item \textbf{Should} be stable over long periods of time
+\end{enumerate}
 \item Adhere to the general principle that beyond these basic requirements, any eventual implementation will be dependent on factors not yet known at the time the requirements are specified. The project should therefore be designed in a manner that is conducive to experimentation and learning about the nature of the problem.
 \end{itemize}
 \subsection{Technologies used}
@@ -138,7 +138,7 @@ This instruction set is often used for specialist Digital Signal Processing hard
 Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
 A comparison between the ESP32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
-\begin{table}[h]
+\begin{table}[H]
 \begin{tabular}{l|lll}
 						& Arduino Uno		& ESP32		& Pixel 3a		\\ \hline
 Clock Frequency			& 16 MHz			& 240 MHz		& 1700 MHz		\\ \hline
@@ -210,7 +210,6 @@ Although the target of this project is the ESP32, the goal is for it to be archi
 This includes both running on different instruction sets and running on different types of computer including desktops and servers.
 The problem of targeting different types of device using the same standard is similar to the problem websites were made to solve.
 The environment of the web adds the bonus that browser-based runtimes are sandboxed and have been aggressively tested for vulnerabilities.
-The traditionally accepted web language, used in both NodeJS and IoT-DSA, is Javascript.
 
 Javascript, though popular, is a bad fit for creating this platform.
 Efficient runtimes are large and are usually themselves very architecture-dependent.
@@ -292,7 +291,7 @@ It is, however, insufficient to ensure that attackers cannot artificially create
 \[ n = \sqrt{2 \times 2^{12 \times 8} \times ln\frac{1}{1-p}}\]
 
 Collision probabilities are given by the following table
-\begin{table}[h]
+\begin{table}[H]
 \begin{tabular}{l|l|l}
 p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 \( 10^{-10}\)	&\( 1.26 \times 10^{10}\)	& every person alive today (\( 7.8 \times 10^{9}\))\\
@@ -302,7 +301,6 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 
 \end{tabular}
 \end{table}
-\pagebreak
 
 12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue, so there is much room for expansion.
 
@@ -336,11 +334,13 @@ In order to maintain the integrity of the sandbox, accessing memory outside of t
 It was decided, as a consequence of the small memory footprint of each function, and the limitations to where memory can be allocated, to reserve page offsets 0x0000 to 0x7FFF (32768 bytes) for the stack, and to reserve offsets 0x8000 to 0xFFFF (32767 bytes) for a heap. Because these pages are cleaned up after a short time, no mechanism for freeing memory was created. A \texttt{uint16\_t} at page offset 0x8000 tracks the amount of allocated heap, and is incremented every time more is allocated. Breaking the Nihilo coding model, and creating highly recursive functions, or functions which allocated and freed a lot of memory, would in turn break this memory allocation scheme.
 
 
-\subsubsection{Task queue and communication}
+\subsubsection{Task Queue and Communication}
 
 One problem encountered early on in the development of Nihilo was the limited RAM of the ESP32. This is exacerbated by the fact that ESP-IDF only exposes half of this already constrained RAM as heap, with the other half being reserved for the call stack. There is only enough dynamically allocated RAM for one complete wasm3 runtime, which would seem to exclude the possibility of one runtime calling another, and then using its result in an operation. Encryption, and network communication are both also dependent on the heap. Although external RAM chips do exist for the ESP32, requiring these would break compatibility with most off-the-shelf ESP32 modules.
 
 The solution is to use a FIFO (first in, first out) task queue. This allows WASM function calls to be placed onto the queue as tasks and executed one by one. These tasks may optionally also specify callbacks, placing new tasks onto the queue once execution is complete. Two machines can have an asynchronous 'dialogue' through callbacks without ever loading more than one of them at a time. This model can also be extended to communication if the queue also contains calls to machines on other devices, in which the execution is replaced with encrypting and sending the call.
+
+For simplicity, tasks in Nihilo take exactly one char* parameter (which can be nullptr), and either return a char* value, or return nothing (which is treated as a function that returns nullptr by the runtime).
 
 Tasks are encapsulated within the \texttt{task} struct, containing;
 \begin{itemize}
@@ -365,11 +365,13 @@ In order to explore how the runtime communicates, consider the following (An API
 Device A has master machine \( x \), with the following code;
 \begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
-NIH_VOID(entry, param);
+NIH_VOID(entry, param){}
 NIH_CHARS(RPC, param){
+  //write "hello, world" into M.N in persistent JSON
+  readString("M.N", "hello, world");
+  //read value back out of JSON
   char* ret;
-  //read A.B out of x's JSON, E.G. "hello, world"
-  readString("A.B", &ret);
+  readString("M.N", &ret);
   return ret;
 }
 \end{verbatim}
@@ -409,7 +411,7 @@ If A then B is turned on, the following events occur from the perspective of the
 \item Device B turns on, connects to wifi, and registers its master machine.
 \item Machine \( y \) executes its entry function, querying a non-local machine from the runtime, and sending it a call for the \texttt{RPC()} function, with the \texttt{success()} and \texttt{fail()} functions as the possible outcomes of the call. The call has no parameter.
 \item Device A receives the call, records the IP address of Machine \( y \) (previously unknown because A turned on before B) and begins to execute \texttt{RPC()}.
-\item Device A queries \lq A.B' from machine \( x \)'s persistent JSON storage. In this example, this returns \lq hello, world'.
+\item Device A writes then queries \lq M.N' from machine \( x \)'s persistent JSON storage.
 \item Machine \( y \) returns the string to Machine \( x \) by calling the \texttt{success()} function.
 \item Device A prints out \lq hello, world'.
 \end{enumerate}
@@ -460,7 +462,7 @@ IP\_ADDR:HEX\_PUBLIC\_KEY
 
 Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrypted) packets containing the actual function to call. The structure of the outer packet is straightforward;
 
-\begin{table}[h]
+\begin{table}[H]
 \begin{tabular}{|p{25mm}|l|l|p{45mm}|}
 \hline
 \textbf{Field Name}	& \textbf{Start byte}	& \textbf{End byte}		& \textbf{Description} \\ \hline
@@ -475,7 +477,7 @@ The first three (Origin and Destination Pub, Contents Length) fields are contain
 
 Once the packet has been decrypted, is parsed as an inner packet.
 
-\begin{table}[h]
+\begin{table}[H]
 \begin{tabular}{|p{25mm}|l|l|p{45mm}|}
 \hline
 \textbf{Field Name}	& \textbf{Start byte}		& \textbf{End byte}		& \textbf{Description} \\ \hline
@@ -489,9 +491,7 @@ Parameter						& 73										& N										& Null-terminated parameter \\ \hline
 \end{table}
 
 Like the outer packet, Function name to Parameter Null are incorporated into a struct for ease of handling. This is called \texttt{wire\_task}, and incorporates all of the information needed to execute the task, other than the origin and destination machine. These public keys, as well as device-specific data are in the \texttt{task} struct. Both \texttt{wire\_task} and \texttt{task} are usually followed directly in memory by the null-terminated parameter if any exists, but this cannot be inside of the struct because it is of varying length.
-
 How these packets are used can also be explained with a sequence diagram. This one covers steps 4 to 9;
-
 \begin{center}
 \begin{tikzpicture}[
 box/.style={rectangle, draw=black, fill=white, very thick, minimum width=40mm, minimum height=12mm, align=center},
@@ -509,7 +509,7 @@ empty/.style=
 \node[box, minimum height = 4.2cm](a_pre_listen)[left of = b_queue_entry, node distance=5cm]{Listen for\\incoming connections};
 \node[box](a_queue_rpc)[left of = b_send_rpc, node distance=5cm]{Receive, decrypt,\\verify and queue\\received task};
 \node[box](a_store_y)[below of = a_queue_rpc, node distance=1.5cm]{Store IP of\\machine \( y \)};
-\node[box](a_exec_rpc)[below of = a_store_y, node distance=1.5cm]{Execute \texttt{RPC}, query\\data from JSON};
+\node[box](a_exec_rpc)[below of = a_store_y, node distance=1.5cm]{Execute \texttt{RPC}, write\\ then query data\\from JSON};
 \node[box](a_queue_success)[below of = a_exec_rpc, node distance=1.5cm]{Queue \texttt{success} to\\run on machine \( y \)};
 \node[box](a_send_success)[below of = a_queue_success, node distance=1.5cm]{Encrypt and send\\queued task};
 \node[box](a_listen)[below of = a_send_success, node distance=1.5cm]{Listen for\\incoming connections};
@@ -591,7 +591,7 @@ Saves \texttt{value} in \texttt{path} in the current machine's JSON. Only object
 \begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
 \begin{verbatim}
 NIH_VOID(save_value, param){
-  writeString("A.B.C.Str", param);
+  writeString("M.N.C.Str", param);
 }
 \end{verbatim}
 \end{tcolorbox}
@@ -603,7 +603,7 @@ Looks up \texttt{path} in the current machine's JSON. Pointer pointed to by \tex
 \begin{verbatim}
 NIH_VOID(log_value, param){
   char* val;
-  readString("A.B.C.Str", &val);
+  readString("M.N.C.Str", &val);
   if(val != nullptr)
     logStr(val);
 }
@@ -659,19 +659,114 @@ hello!
 response
 \end{verbatim}
 \end{tcolorbox}
+
+\textbf{\texttt{uint64\_t uptime()}}\newline
+Returns the number of milliseconds since the system booted.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  logStr("uptime:");
+  logStr(decstr((int)uptime()));
+}
+\end{verbatim}
+\end{tcolorbox}
+
+\textbf{\texttt{char* decstr(int input)}}\newline
+Returns the string version of the passed integer, allocated into a new buffer.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  logStr(decstr(5));//prints 5
+}
+\end{verbatim}
+\end{tcolorbox}
+
+\textbf{\texttt{int strdec(char* input)}}\newline
+Returns the integer corresponding to the passed string.
+
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(log_value, param){
+  if(strdec(param) == 0) 
+    logStr("passed zero");
+  else
+    logStr("passed non-zero");
+}
+\end{verbatim}
+\end{tcolorbox}
+
 \textbf{\texttt{void setReturn (const char* ret)}}\newline
 Internal function, assisting with returning data to the runtime.
 
 \textbf{\texttt{void getParam(char** param)}}\newline
 Internal function, assisting with passing the parameter from the runtime to WASM code.
 
+\section{Testing and Results}
 
+In section 5.1, the high-level requirements are listed. There are two types of requirements, \textbf{must} and \textbf{should}. \textbf{Must} level requirements do not require much experimental setup, only a single verification. \textbf{Should} level requirements, on the other hand, are more relative and require experimental parameters to be set beforehand.
+\subsection{Execution}
+\begin{enumerate}
+\item \textbf{Must} suport mature languages, compilers and tooling. This is a fact of the design of Nihilo, and so does not need to be tested.
+\item \textbf{Should} execute tasks quickly. It should take under 5 milliseconds (ms) to create an execution context, execute a function, clean up the memory, and then move on to the next task. It will be calculated by taking the time between the start and end logs of the following code, averaging over 10 runs, and dividing by 100:
+\begin{tcolorbox}[colback=white,grow to left by=2.5mm,grow to right by=2.5mm,left*=0mm,right*=0mm,sharp corners]
+\begin{verbatim}
+NIH_VOID(test, param){
+  if(strlen(param) > 0) logStr("end");
+}
+NIH_VOID(entry, param){
+  logStr("started");
+  for(int i = 0; i < 100; i++){
+    char* arg = (char*)(i==99?"end":"");
+  queue(nullptr, "test", arg, nullptr, nullptr);
+  }
+}
+\end{verbatim}
+\end{tcolorbox}
 
+The results are as follows:
+\begin{table}[H]
+\begin{tabular}{|l|l|l|l|}
+\hline
+Start Time(ms)		&End Time(ms)		&100 Task Time(ms)		&Single Task Time(ms)		\\ \hline
+2137							&2537						&400    							&4\\ \hline
+2627							&3057						&430	    						&4.3\\ \hline
+5657							&6067						&410		    					&4.1\\ \hline
+2127							&2527						&400			    				&4\\ \hline
+3127							&3547						&420				    			&4.2\\ \hline
+2147							&2557						&410					    		&4.1\\ \hline
+2147							&2557						&410						    	&4.1\\ \hline
+2147							&2567						&420						    	&4.2\\ \hline
+2177							&2597						&420							    &4.2 \\ \hline
+\end{tabular}
+\end{table}
+\emph{Note:the fact that the 100 task time is always a multiple of 10ms appears to come from periodic buffering in the ESP32's logging system. While this likely affects the results, it is insignificant compared to even the smallest result, \( \pm\)2.5\%.}
 
-\section{Results}
+The average of the single task times is 4.13 ms, beating the minimum requirement by almost 20\%.
 
+\end{enumerate}
+\subsection{Storage}
+\begin{enumerate}
+\item \textbf{Must} be able to save strings while the device is off. This is proven as a part of tests 3 and 4.
+\item \textbf{Must} be able to structure the saved data. This does not need to be tested, as the structure of the saved data is an implicit part of the design.
+\item \textbf{Should} write the data quickly.
+\item \textbf{Should} read the data quickly.
+\end{enumerate}
 
-\section{Analysis and conclusion}
+\subsection{Communication}
+\begin{enumerate}
+\item \textbf{Must} ensure messages arrive as they are sent. This does not need testing, as it is a part of the TCP protocol, which is assumed to work.
+\item \textbf{Must} allow the user to call a function on the target device, using a
+string as a parameter and as the return value. This is also an implicit part of the design, which is tested as a part of 4 and 5.
+\item \textbf{Must} be secure, the content of a message should not be visible to
+an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this heading is an assurance that the code was tested and audited thoroughly.
+\item \textbf{Should} be low-latency, sending a message and receiving a reply
+quickly.
+\item \textbf{Should} be stable over long periods of time.
+\end{enumerate}
+
+\section{Analysis and Conclusion}
 
 
 \section{Reflection}
