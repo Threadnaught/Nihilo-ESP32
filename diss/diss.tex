@@ -34,9 +34,11 @@ I would like to thank my tutor, Atta Badii, for guiding me away from pure theory
 
 I would like to thank my girlfriend for putting up with my increasingly antisocial sleeping pattern as the deadline got closer.
 
-I would like to thank the entire open source community for creating nearly every tool I used to create this project. Through their example, they showed me what not to do and in some equally important cases, what not to do.
+I would like to thank the entire open source community for creating nearly every tool I used to create this project. Through their example, they showed me what to do and in some equally important cases, what not to do.
 
 \tableofcontents
+\listoffigures
+\listoftables
 \section{Introduction}
 Over the past 50 years, UNIX and its descendent Operating Systems have created a set of standardised patterns for how computers interact with themselves, each other, and the outside world.
 These patterns; files, threads, device drivers, etc. are so powerful that computing devices are classified first by whether or not they are capable of supporting them.
@@ -144,7 +146,6 @@ Released in 2016, the Espressif Systems ESP32 is a powerful dual-core microcontr
 It is based a Cadence IP core, which is in turn based on the Xtensa instruction set \cite{32datasheet}.
 This instruction set is often used for specialist Digital Signal Processing hardware because it supports SIMD and customised instructions \cite{lx6datasheet}.
 Although it is RISC, it generally complies programs into fewer instructions than arm because it allows for more flexible memory manipulation.
-A comparison between the ESP32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor) follows;
 
 \begin{table}[H]
 \begin{tabular}{l|lll}
@@ -160,6 +161,7 @@ Ethernet				& N 				& \textbf{Y}	& N				\\ \hline
 IO pins					& \textbf{20/22}	& \textbf{39}	& N/A			\\
 
 \end{tabular}
+\caption{A comparison between the ESP32, Arduino Uno (with an ATmega328P microcontroller), and Pixel 3A (with a Snapdragon 670 microprocessor)}
 \end{table}
 
 \emph{Note: Missing functionality can be added using external electronics}
@@ -174,6 +176,7 @@ ESP32-WROOM-32D, containing 4MB of flash memory. This module alone, however, is 
 
 Similar to how the ESP32's functionality is packaged into modules to make integrating it easier, the modules are then attached to boards to make programming them easier. These boards typically have buttons to restart and enable bootloader mode, a USB to UART chip which enables programming the device over USB, and a voltage regulator which converts the 5 volt USB power into the 3.3 volt power which the chip requires.
 
+\begin{figure}[H]
 \begin{center}
 \begin{tikzpicture}
 \node[anchor=south west] at(0,0) {\includegraphics{luanode.png}};
@@ -194,7 +197,9 @@ Similar to how the ESP32's functionality is packaged into modules to make integr
 \draw[->, orange, ultra thick] (uart_label) -- (uart);
 \draw[->, orange, ultra thick] (module_label) -- (module);
 \end{tikzpicture}
+\caption{The ESP32}
 \end{center}
+\end{figure}
 
 The ESP-IDF (IoT Development Framework) is a library provided by Espressif systems. It integrates into and extends the dedicated hardware provided by the processor.
 For example, Writing code against the WiFi transceiver requires using the IDF's TCP, UDP, or HTTP library.
@@ -295,7 +300,6 @@ It is, however, insufficient to ensure that attackers cannot artificially create
 
 \[ n = \sqrt{2 \times 2^{12 \times 8} \times ln\frac{1}{1-p}}\]
 
-Collision probabilities are given by the following table:
 \begin{table}[H]
 \begin{tabular}{l|l|l}
 p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
@@ -305,6 +309,7 @@ p				&n							&\( \approx \) equivalent to assigning one hash to \\ \hline
 0.1				&\( 1.29 \times 10^{14}\)	& every cell in a human body (including bacteria) (\( 10^{14}\))
 
 \end{tabular}
+\caption{Number of 12-byte hashes for a given collision probability}
 \end{table}
 
 12-byte IDs allow for expansion to tens of trillions of machines before collision becomes an issue, so there is much room for expansion.
@@ -430,6 +435,7 @@ If Device B were to encounter a fatal, non-recoverable error in its execution of
 
 On a lower level, however, this process is more complicated. The code touches communication, encryption, JSON storage, and WASM execution.  Sequence diagrams can be used to help explain registering and querying machines to the directory, which are contained in steps 2 and 4;
 
+\begin{figure}[H]
 \begin{center}
 \begin{tikzpicture}[
 box/.style={rectangle, draw=black, fill=white, very thick, minimum width=40mm, minimum height=12mm, align=center},
@@ -457,7 +463,9 @@ empty/.style=
 \draw[->] (dir_query_get.south east) -- (dev_query_receive.west);
 
 \end{tikzpicture}
+\caption{The machine registry and discovery process}
 \end{center}
+\end{figure}
 
 The POST request is a machine descriptor, containing the IP address and public key of the target machine in the form \texttt{IP\_ADDR:HEX\_PUBLIC\_KEY}. Only a single machine may be registered at once, but several POSTs may be made to register several machines. If a given machine is re-registered with a new IP address, the old IP address is deleted and the new IP is added instead. Because devices may turn on or off, or lose internet connection, the IP address in the directory may not be the most up to date, and may not work at all. All directory server operations happen on port 80 (the standard HTTP port), and against the root (http://address/) file. Because the directory server gives publicly available information, it is not encrypted with HTTPS.
 
@@ -470,7 +478,7 @@ IP\_ADDR:HEX\_PUBLIC\_KEY \newline
 IP\_ADDR:HEX\_PUBLIC\_KEY
 }
 
-Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrypted) packets containing the actual function to call. The structure of the outer packet is straightforward;
+Steps 5 and 8 involve sending, and 6 and 9 involve receiving messages. Because these messages are encrypted, they have two packets; outer (unencrypted) packets directing them to their destination while providing information required to decrypt them, and inner (encrypted) packets containing the actual function to call.
 
 \begin{table}[H]
 \begin{tabular}{|p{25mm}|l|l|p{45mm}|}
@@ -481,6 +489,7 @@ Destination Pub			& 32								& 63							& Public Key of destination machine \\ 
 Contents Length			& 63								& 79							& True pre-encryption length of inner packet \\ \hline
 Body								& 80								& N								& Encrypted data (first 16 bytes are the Initialization Vector) \\ \hline
 \end{tabular}
+\caption{Outer packet structure}
 \end{table}
 
 The first three (Origin and Destination Pub, Contents Length) fields are contained within the \texttt{packet\_header} struct for ease of handling. The only thing that can be told from intercepted packets, without the shared secret, is the message endpoint machines and the message length and frequency. While it may allow an attacker to deduce the general nature of the communication, they should not be able to tell its content. SSL exposes similar information through port numbers and message lengths, and is considered highly secure.
@@ -498,17 +507,19 @@ On Failure					& 52										& 71									& Name of the function to call on orig
 Parameter Null			& 72										& 72									& Is the parameter null? \\ \hline
 Parameter						& 73										& N										& Null-terminated parameter \\ \hline
 \end{tabular}
+\caption{Inner packet structure}
 \end{table}
 
 Like the outer packet, Function name to Parameter Null are incorporated into a struct for ease of handling. This is called \texttt{wire\_task}, and incorporates all of the information needed to execute the task, other than the origin and destination machine. These public keys, as well as device-specific data are in the \texttt{task} struct. Both \texttt{wire\_task} and \texttt{task} are usually followed directly in memory by the null-terminated parameter if any exists, but this cannot be inside of the struct because it is of varying length.
 How these packets are used can also be explained with a sequence diagram. This one covers steps 4 to 9;
+\begin{figure}[H]
 \begin{center}
 \begin{tikzpicture}[
 box/.style={rectangle, draw=black, fill=white, very thick, minimum width=40mm, minimum height=12mm, align=center},
 empty/.style=
 ]
-\node[box](a){\textbf{Device A}};
-\node[box](b)[right of = a, node distance=5cm]{\textbf{Device B}};
+\node[box, minimum height=7.5mm](a){\textbf{Device A}};
+\node[box, minimum height=7.5mm](b)[right of = a, node distance=5cm]{\textbf{Device B}};
 
 \node[box](b_init)[below of = b, node distance=1.5cm]{Initialization, directory\\server query};
 \node[box](b_queue_entry)[below of = b_init, node distance=1.5cm]{Queue machine \( y \)'s\\function \texttt{entry}};
@@ -548,7 +559,9 @@ empty/.style=
 \draw[->] (a_send_success) -- (b_queue_success);
 
 \end{tikzpicture}
+\caption{How a function, and its return is queued}
 \end{center}
+\end{figure}
 
 Device A stores machine \( y \)'s IP address and public key when the task is received, because device A turns on before B. Because the directory server is only queried by the Nihilo runtime when the device boots, device A has no knowledge of device B or machine \( y \) until it receives the first packet. Device B does not do the same when it receives its message because it already knows about machine \( x \).
 \subsection{Nihilo API}
@@ -736,7 +749,6 @@ NIH_VOID(entry, param){
 \end{verbatim}
 \end{tcolorbox}
 
-The results are as follows:
 \begin{table}[H]
 \begin{tabular}{|l|l|l|l|}
 \hline
@@ -751,6 +763,7 @@ Start Time(ms)		&End Time(ms)		&100 Tasks Time(ms)		&Single Task Time(ms)		\\ \h
 2147							&2567						&420						    	&4.2\\ \hline
 2177							&2597						&420							    &4.2 \\ \hline
 \end{tabular}
+\caption{Queueing test results}
 \end{table}
 
 The average single task time is 4.13ms.
@@ -789,6 +802,7 @@ Start Time(ms)		&End Time(ms)				&100 Writes Time(ms)		&Single Write Time(ms)		\
 2167	 & 4417	 & 2250	 & 2.25\\ \hline
 2857	 & 5117	 & 2260	 & 2.26\\ \hline
 \end{tabular}
+\caption{Writing test results}
 \end{table}
 
 The average single write time is 2.49ms.
@@ -823,6 +837,7 @@ Start Time(ms)		&End Time(ms)				&100 Reads Time(ms)		&Single Read Time(ms)		\\ 
 3847	 & 3927	 & 80	 & 0.08\\ \hline
 7297	 & 7377	 & 80	 & 0.08\\ \hline
 \end{tabular}
+\caption{Reading test results}
 \end{table}
 
 The average single read time is 0.082ms.
@@ -866,7 +881,7 @@ This test was repeated 10 times, and did not hit the ``not same" failure conditi
 \item \textbf{Must} allow the user to call a function on the target device, using a
 string as a parameter and as the return value. This is also an implicit part of the design, which is tested as a part of 4 and 5.
 \item \textbf{Must} be secure, the content of a message should not be visible to
-an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this heading is an assurance that the code was tested and audited thoroughly.
+an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this critera is an assurance that the code was tested and audited thoroughly.
 \item \textbf{Must} be stable over long periods of time. This was tested by leaving device on for 24 hours, then executing the code in test \#5. This was repeated 3 times over 72 hours.
 \item \textbf{Should} be low-latency, sending a message and receiving a reply in under 10 seconds. The following code was put on two devices, one of which acted as a server and the other, the client. The client queues \texttt{RPC()} on the server, and when it executes successfully, the server queues \texttt{success("finished")} on the client, which is then printed out. This test is repeated 10 times.
 
@@ -904,6 +919,7 @@ Start Time(ms)		&End Time(ms)				&Single Call Time(ms)\\ \hline
 5747	 & 14927	 & 9180\\ \hline
 2577	 & 23817	 & 21240\\ \hline
 \end{tabular}
+\caption{Calling test results}
 \end{table}
 
 The average call time is 13359ms.
@@ -912,21 +928,22 @@ The average call time is 13359ms.
 
 
 \section{Analysis and Conclusion}
+\subsection{Analysis}
 The ESP32's logging system appears to buffer results and emit them every 10ms. While this likely affects the results, it accounts for less than 15\% of even the smallest result (70ms). Because the tests are repeated 10 times, and the results are at least 7 times the logging interval, it is assumed that any distortions to the result are evened out when it is averaged.
 
-For the execution test, the average of the single task time is 4.13ms which beats the minimum requirement by almost 20\%. The results are also tightly grouped in duration differing by at most 0.3ms, indicating that the code is well optimized. While this is a good result, it is worth noting that performing the same by calling it directly rather than queuing the task is so fast the start and end logs are printed in the same millisecond. Although calling functions, and managing the queue have some amount of associated overhead, by far the greatest factor is constructing the sandbox. The wasm3 runtime has to read the webassembly from disk, parse it, and link all of the functions. It also has to allocate and then set over 65Kb of memory to zeros to ensure the integrity of the sandbox. Finding a way to load a module once, and then keep it cached in ram without having to continually re-parse it would significantly accelerate this test, as would adding some kind of dynamic memory expansion to wasm3. Unfortunately, there may be no easy way to significantly accelerate speeds inter-sandbox speeds so they almost match calling a function within the sandbox.
+For the execution test, the average of the single task time is 4.13ms which beats the minimum requirement by almost 20\%. The results are also tightly grouped in duration differing by at most 0.3ms, indicating that the code is well optimized. While this is a good result, it is worth noting that performing the same test by calling it directly rather than queuing the task is so fast that start and end logs are printed in the same millisecond. Although calling functions, and managing the queue have some amount of associated overhead, by far the greatest factor is constructing the sandbox. The wasm3 runtime has to read the webassembly from disk, parse it, and link all of the functions. It also has to allocate and then set over 65Kb of memory to zeros to ensure the integrity of the sandbox. Finding a way to load a module once, and then keep it cached in ram without having to continually re-parse it would significantly accelerate this test, as would adding some kind of dynamic memory expansion to wasm3. Unfortunately, there may be no easy way to significantly accelerate speeds inter-sandbox speeds so they almost match calling a function within the sandbox, or natively.
 
 The next three tests were against the JSON persistent store. The first was a write speed test, and while it met the speed targets well, there is likely significant scope for optimization. The next was the read speed test, which was over 5x faster than the target. Finally, the accuracy test was perfect for the 1000 values it ran against.
 
-Although it was a part of the specification, along with execution and communication, storage did not receive as much development time as the other two components. Data is stored very simply, a JSON file is read from SPIFFS. Writing moderate amounts of data with a machine, into the the kilobytes, would likely be much slower than writing a short string. Every write requires opening the whole file, parsing the JSON, modifying it, converting it back to a string, then saving it again, meaning that writing many values to a file requires linearly more time for each write. It is unsurprising, given that SPIFFS and cJSON are well-tested and professional libraries that the accuracy test was perfect. A better persistence system would abandon the file-based storage all together, and focus instead on trees. Trees are, after all, what is being indirectly stored through JSON either in the machine metadata, or the user-defined data. They can be efficiently represented using a key-value store, for which the ESP-IDF already has a library, and do not require all of the data about a machine to be queried from and then written to storage when one aspect must be changed. A machine data caching system based on the current design would have to work caching whole machines at once, so would be of limited value, but a tree-based system would enable the granularity for caching to be effective.
-
-The final quantitative test was associated with communication. This was the only test that did not meet the baseline set, taking an average of <13 seconds when the target was 10. Dividing to give an average of 6.7 seconds for one leg of the communication, from one peer to the other rather than a round trip. While this is very bad for most communication protocols, it is still applicable for many applications. While this would not be suitable for running a user interface, it would be for data being logged back to a central server from an IoT device, or for checking for software updates from a central server. 
+The final quantitative test was associated with communication. This was the only test that did not meet the baseline set, taking an average of more than 13 seconds when the target was 10. Dividing to give an average of 6.7 seconds for one leg of the communication, from one peer to the other rather than a round trip. While this is very bad for most communication protocols, it is still applicable for many applications. While this would not be suitable for running a user interface, it would be for data being logged back to a central server from an IoT device, or for checking for software updates from a central server. 
 
 A variety of factors are at play here, each contributing to the round trip time (RTT). It is clear from the 4.1ms single task time that the time required to create and execute the tasks once they got to their intended destination was not a significant factor. The first is that both key derivation and encryption take a significant amount of time. While accelerating the AES encryption is unlikely, replacing the ECDH key derivation step with a cached key would allow the peers to communicate much faster after the initial connection, representing a large amount of computation saved for at most 72 bytes of key and secret. The second factor is that creating sockets is both long and of an uncertain duration. Sometimes, a TCP connection goes through straight away, sometimes it requires several tries to complete the connection. Similarly, the packets themselves, although small, might require several retransmissions to be received. The TCP-based factors were also exacerbated by the variability in the quality of the WiFi hotspot being emitted from the development computer. Sometimes, it would run anomalously slow, and occasionally it would fail silently, only indicating this failure through refused connections. The sockets could be more available if they were held open longer after receiving a message and this would especially help with replies to messages which are generated quickly, but it would also require a change in the architecture of Nihilo to support multitasking, so that the sockets could be managed while also executing the task.
-
+\subsection{Conclusion}
 What the raw timing results do not show is which parts of Nihilo used a disproportionate amount of development time due to pre-existing technical debt. In computer science the phrase `technical debt' has come to be mean the spiralling costs associated with not fixing a problem, building up similarly to how compound interest builds up on unpaid debt. Whether these costs are financial or merely personal, they are avoidable losses to a poorly designed system. As workaround builds on workaround, the whole system expands to become difficult to understand and difficult to maintain. The wasm3 webassembly runtime was chosen out of a desire to avoid the clearly defined effort of porting a more competently implemented runtime, but what wasn't known at the time was the less clearly defined cost of paying off the wasm3 developer's technical debt. 
 
 The wasm3 runtime would reject code which compiled and executed in other environments, apparently at random. This caused tests to have to be rewritten several times before they would execute at all. It also created an extra layer of obfuscation that needed to be navigated before the runtime's other bugs could even be found. It had no heap, no implementation of the C or C++ standard library, and very intermittent support for other implementations of those libraries compiled in with the wasm executable. Going forward with development, the first priority will be to excise this runtime from the codebase in favour of WAMR.
+
+Although it was a part of the specification, along with execution and communication, storage did not receive as much development time as the other two components. Data is stored very simply, a JSON file is read from SPIFFS. Writing moderate amounts of data with a machine, into the the kilobytes, would likely be much slower than writing a short string. Every write requires opening the whole file, parsing the JSON, modifying it, converting it back to a string, then saving it again, meaning that writing many values to a file requires linearly more time for each write. It is unsurprising, given that SPIFFS and cJSON are well-tested and professional libraries that the accuracy test was perfect. A better persistence system would abandon the file-based storage all together, and focus instead on trees. Trees are, after all, what is being indirectly stored through JSON either in the machine metadata, or the user-defined data. They can be efficiently represented using a key-value store, for which the ESP-IDF already has a library, and do not require all of the data about a machine to be queried and then rewritten to storage when one value must be changed. A machine data caching system based on the current design would have to work caching whole machines at once, so would be of limited value, but a tree-based system would enable the granularity for caching to be effective.
 
 Other priorities in the ongoing development of the Nihilo runtime include re-evaluating the core event-loop on which it is based. Just because only one execution context can fit in RAM at a time does not mean that other, smaller threads can't be handling communication, storage, garbage disposal, and other similar tasks. In addition, there are many situations in which more runtimes could fit in the RAM;
 \begin{itemize}
@@ -937,7 +954,7 @@ Other priorities in the ongoing development of the Nihilo runtime include re-eva
 \item One runtime could be loaded at a time, but temporarily save its memory to flash to allow for multitasking.
 \end{itemize}
 
-Some combination of these factors is likely to emerge in the continued development of Nihilo. The event queue is unlikely to go away, although it was introduced as a workaround its versatility in dealing with communication between machines is extremely useful. What is more likely is that the event loop will be folded into a multithreaded architecture, with multiple runtimes removing tasks from the queue, using them, and placing new tasks back onto it. This introduces its own problems with thread safety, large parts of Nihilo have already been written with mutexes which prevent multiple threads accessing the same resource. Mutexes in turn introduce their own problems, with deadlock (when a pair of threads are each waiting for the other to unlock to proceed), but the current architecture of Nihilo is based on locking one resource at a time, making this impossible.
+Some combination of these factors is likely to emerge in the continued development of Nihilo. The event queue is unlikely to go away, although it was introduced as a workaround its versatility in dealing with communication between machines is extremely useful. What is more likely is that the event loop will be folded into a multithreaded architecture, with multiple runtimes removing tasks from the queue, using them, and placing new tasks back onto it. This introduces its own problems with thread safety, but large parts of Nihilo have already been written with mutexes which prevent multiple threads accessing the same resource. Mutexes in turn introduce their own problems, with deadlock (when a pair of threads are each waiting for the other to unlock to proceed), but the current architecture of Nihilo is based on locking one resource at a time, making this impossible.
 
 Such a change would also be a prerequisite to extending beyond microcontrollers to phones, computers and servers. Although the Nihilo communication model is interesting, to become useful for IoT devices it must support communication between different types of devices. An internet connected toaster is of little use if it can only talk to other toasters. Because modern servers derive much of their power from supporting many threads, running a single single threaded runtime on a server would be a waste. Private keys are banned from transferring from one physical device to another, so this change would also require the ability to create named identities which could be applied to several machines or change over time, in  the a similar way an SSL certificate is useful as a named identity for an IP address. This could be achieved by exposing the directory server over HTTPS rather than HTTP, and applying name tags to the returned machines, creating a primitive hybrid PKI as discussed in the security model section.
 
@@ -952,7 +969,7 @@ Aside from these future prospects and minor if frustrating issues with wasm3, th
 The objectives in the Project Initiation Document (PID) were;
 \begin{itemize}
 \item Gain a better understanding of Rust
-\item Use as many existing tools as possible, to avoid reinventing the wheel.
+\item Use as many existing tools as possible, to avoid reinventing the wheel
 \item Finish on time
 \end{itemize}
 
@@ -964,7 +981,7 @@ Finishing on time is the third objective, and the only one which is in the futur
 
 To me, by far the most interesting, and frustrating part of this project was writing the code. It required problem solving, reading obscure and outdated documentation, and searching for header files and other implementations in open source projects on github. Many problems could only be solved through combining these approaches, and using brute force to try several solutions. Unlike higher level languages like python or javascript, low-level languages often return cryptic error messages, if any at all, and do not at all make it clear how they can be resolved. Avoiding memory leaks added another layer of challenge not usually encountered. Between all of the issues posed, it was not uncommon to spend days working on a problem, only to find that the solution required changing other things not initially obviously connected to the problem. I did find these situations frustrating, but that frustration increased the reward of finding a solution.
 
-The report, on the other hand, was more incremental. There was much more of a guarantee that spending \( x \) hours sitting down and typing the report bring me a distance proportional to \( x \) closer to finishing. There was less chance that I would find a whole section fatally flawed, and have to rip it out and start again like happens so often with code. This certainty, however, bred, complacency, and I spent too long trying to get the code working before starting on the report. If I could do this project again, I would write the report closer to when I wrote the code, so it would be fresher in my mind.
+The report, on the other hand, was more incremental. There was much more of a guarantee that spending \( x \) hours sitting down and typing the report brings me a distance proportional to \( x \) closer to finishing. There was less chance that I would find a whole section fatally flawed, and have to rip it out and start again like happens so often with code. This certainty, however, bred complacency, and I spent too long trying to get the code working before starting on the report. If I could do this project again, I would write the report closer to when I wrote the code, so it would be fresher in my mind.
 
 Looking back over my university and entire academic career, it is now clear to me that the times when I have been given a problem and wide latitude to find a solution are when I do best, not necessarily in terms of grade but in terms of learning. I become more motivated and more passionate about my assigned task. I can take what I have learned academically, supplement it with my own research, and create a project which is unique to me.
 
