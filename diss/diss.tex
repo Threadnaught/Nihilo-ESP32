@@ -47,8 +47,7 @@ May 11, 2019
 \large{\textbf{Declaration}}
 
 I, Patrick Hingley, of the Department of Computer Science, University of Reading,
-confirm that all the sentences, figures, tables, equations, code snippets, artworks, and illus-
-trations in this report are original and have not been taken from any other person’s work,
+confirm that all the sentences, figures, tables, equations, code snippets, artworks, and illustrations in this report are original and have not been taken from any other person’s work,
 except where the works of others have been explicitly acknowledged, quoted, and referenced.
 I understand that if failing to do so will be considered a case of plagiarism. Plagiarism is a
 form of academic misconduct and will be penalised accordingly.
@@ -911,7 +910,7 @@ This test was repeated 10 times, and did not hit the ``not same" failure conditi
 \item \textbf{Must} allow the user to call a function on the target device, using a
 string as a parameter and as the return value. This is also an implicit part of the design, which is tested as a part of 4 and 5.
 \item \textbf{Must} be secure, the content of a message should not be visible to
-an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this critera is an assurance that the code was tested and audited thoroughly.
+an attacker. This cannot be proven, only disproven. If many researchers cannot find a flaw, but a single researcher can, the content of the message is visible to an attacker. All that can be used for this criteria is an assurance that the code was tested and audited thoroughly.
 \item \textbf{Must} be stable over long periods of time. This was tested by leaving device on for 24 hours, then executing the code in test \#5. This was repeated 3 times over 72 hours.
 \item \textbf{Should} be low-latency, sending a message and receiving a reply in under 10 seconds. The following code was put on two devices, one of which acted as a server and the other, the client. The client queues \texttt{RPC()} on the server, and when it executes successfully, the server queues \texttt{success("finished")} on the client, which is then printed out. This test is repeated 10 times.
 
