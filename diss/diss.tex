@@ -31,7 +31,7 @@ Department of Computer Science}
 
 \includegraphics[width=50mm]{uorlogo.png}\\[10mm]
 
-\Huge{Nihilo: an embedded Internet of Things runtime}\\[10mm]
+\Huge{Nihilo: an versatile embedded runtime}\\[10mm]
  
 \huge{Patrick Hingley}\\[10mm]
 
@@ -57,7 +57,7 @@ May 11, 2019
 
 \pagebreak
 \section{Abstract}
-The Internet of Things (IoT) is a large and growing industry connecting home devices to the internet for remote control and monitoring, based on embedded computers. Nihilo (pronounced nie-low) is a runtime designed to simplify embedded development, while also making it more secure. Nihilo supports encrypted remote procedure calls for communication, JSON files for storage, and webassembly as a portable executable format, and all on a microcontroller with half a megabyte of RAM. A variety of languages can already target Nihilo devices, including C and C++. Although its current form has limits, the main goal of this project was to prove the concept's validity, which it does.
+The Internet of Things (IoT) is a large and growing industry connecting home devices to the internet for remote control and monitoring, based on embedded computers. Nihilo (pronounced nie-low) is a runtime designed to simplify embedded development, while also making it more secure. Nihilo supports encrypted remote procedure calls for communication, JSON files for storage, and webassembly as a portable executable format, on a \$3 microcontroller with half a megabyte of RAM. A variety of languages can already target Nihilo devices, including C and C++. Although its current form has limits, the main goal of this project was to prove the concept's validity, which it does.
 
 \section{Acknowledgements}
 I would like to thank my tutor, Atta Badii, for guiding me away from pure theory and towards practicality.
@@ -65,6 +65,10 @@ I would like to thank my tutor, Atta Badii, for guiding me away from pure theory
 I would like to thank my girlfriend for putting up with my increasingly antisocial sleeping pattern as the deadline got closer.
 
 I would like to thank the entire open source community for creating nearly every tool I used to create this project. Through their example, they showed me what to do and in some equally important cases, what not to do.
+
+\textbf{keywords:} webassembly, embedded computing, Internet of Things, elliptic curves
+
+\textbf{Word Count:}
 \pagebreak
 
 \tableofcontents
@@ -590,7 +594,7 @@ empty/.style=
 \draw[->] (a_send_success) -- (b_queue_success);
 
 \end{tikzpicture}
-\caption{How a function, and its return is queued}
+\caption{How a function and its return are queued}
 \end{center}
 \end{figure}
 
