@@ -1,4 +1,5 @@
-*Note* This project is deprecated. Please refer [Here](https://github.com/Threadnaught/Nihilo).
+*Note: This project is deprecated. Please refer [Here](https://github.com/Threadnaught/Nihilo).*
+
 # Nihilo
 My undergraduate dissertation, such as it is. It should go without saying that in no way, shape or form is it a good idea to use it in production.
 
